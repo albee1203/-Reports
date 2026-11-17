@@ -200,3 +200,5 @@ table.steps td.icon { width: 28px; text-align: center; font-weight: 700; }
 tr.st-done td.icon { color: var(--ok); } tr.st-warn td.icon { color: var(--warn); } tr.st-todo td.icon { color: var(--err); }
 
 .subcard { border: 1px dashed var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
+
+td.changed { background: #fff3d6; font-weight: 600; }

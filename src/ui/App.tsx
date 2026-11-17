@@ -43,10 +43,29 @@ function ProjectList({ onOpen }: { onOpen: (id: string) => void }) {
   const refresh = () => listProjects().then(setList);
   useEffect(() => { refresh(); }, []);
   const create = async (p: Project) => { await saveProject(p); onOpen(p.id); };
+  const [pending, setPending] = useState<{ name: string; data: any } | null>(null);
+  const [pw, setPw] = useState('');
+  const [msg, setMsg] = useState('');
+  const saveImported = async (p: Project) => {
+    if (!p?.id || !p.settings) { setMsg('檔案格式不符'); return; }
+    if ((await listProjects()).some((x) => x.id === p.id) && !confirm(`本機已有相同專案「${p.name}」，匯入將覆蓋本機版本。確定？`)) return;
+    await saveProject(p); setMsg(`已匯入「${p.name}」`); refresh();
+  };
   const importJson = async (f: File) => {
-    const p = JSON.parse(await f.text()) as Project;
-    if (!p.id || !p.settings) { alert('檔案格式不符'); return; }
-    await saveProject(p); refresh();
+    setMsg('');
+    let data: any;
+    try { data = JSON.parse(await f.text()); } catch { setMsg('檔案不是有效之 JSON'); return; }
+    const { isEncrypted } = await import('./crypto');
+    if (isEncrypted(data)) { setPending({ name: f.name, data }); setPw(''); return; }
+    await saveImported(data as Project);
+  };
+  const unlock = async () => {
+    try {
+      const { decryptJson } = await import('./crypto');
+      const p = await decryptJson<Project>(pending!.data, pw);
+      setPending(null); setPw('');
+      await saveImported(p);
+    } catch (e: any) { setMsg(e.message); }
   };
   return (
     <div className="home">
@@ -83,7 +102,16 @@ function ProjectList({ onOpen }: { onOpen: (id: string) => void }) {
             ))}
           </tbody>
         </table>
-        <label className="file">匯入專案備份（.json）<input type="file" accept=".json" onChange={(e) => e.target.files?.[0] && importJson(e.target.files[0])} /></label>
+        <label className="file">匯入專案備份（.json，含加密備份）<input type="file" accept=".json" onChange={(e) => { if (e.target.files?.[0]) importJson(e.target.files[0]); e.target.value = ''; }} /></label>
+        {pending && (
+          <div className="row">
+            <span>「{pending.name}」為加密備份，請輸入密碼：</span>
+            <input type="password" autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && unlock()} />
+            <button className="primary" disabled={!pw} onClick={unlock}>解密並匯入</button>
+            <button onClick={() => setPending(null)}>取消</button>
+          </div>
+        )}
+        {msg && <p className={msg.startsWith('已匯入') ? 'ok' : 'error'}>{msg}</p>}
       </section>
     </div>
   );

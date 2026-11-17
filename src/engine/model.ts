@@ -650,3 +650,15 @@ export function buildGraph(p: Project, sc: Scenario): { g: Graph; info: ModelInf
   }
   return { g, info: { cb, N, fcols, otherIS, otherBS, faClasses, loanIds: loans.map((l) => l.id) } };
 }
+
+// 全部欄位皆為零（或未提供）之明細列；標題、小計、合計列不視為零值列
+export function isZeroRow(r: Row, ev: { value: (id: string, c: number) => Value }, ncol: number) {
+  if (r.style === 'header' || r.style === 'total' || r.style === 'subtotal') return false;
+  for (let c = 0; c < ncol; c++) {
+    const cell = r.cells[c];
+    if (!cell || cell.kind === 'na') continue;
+    const v = ev.value(r.id, c);
+    if (typeof v === 'number' && Math.abs(v) >= (r.format === 'amount' ? 0.5 : 1e-9)) return false;
+  }
+  return true;
+}

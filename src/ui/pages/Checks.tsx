@@ -5,6 +5,8 @@ import { SH, buildGraph } from '../../engine/model';
 import { evaluate } from '../../engine/graph';
 import { cashAlerts, Issue } from '../../engine/checks';
 import { LineChart, Legend } from '../Charts';
+import { assumptionDiff, AssumpDiff } from '../../engine/diff';
+import { Graph } from '../../engine/graph';
 
 const LEVEL: Record<string, string> = { error: '勾稽差異', incomplete: '未完成', warning: '待確認', info: '提示' };
 
@@ -69,7 +71,7 @@ export function ComparePage() {
     const val = (id: string) => info.fcols.map((c) => ev.num(id, c));
     const cash = val('bs:cash');
     return {
-      sc, years: info.fcols.map((c) => g.columns[c].year),
+      sc, g, years: info.fcols.map((c) => g.columns[c].year),
       metrics: [
         ['營業收入', val('is:rev')],
         ['本期淨利', val('is:ni')],
@@ -99,6 +101,7 @@ export function ComparePage() {
         </div>
         <p className="hint">滑鼠移至圖上可檢視各年度數值；完整數字見下表。最多 8 個情境以固定顏色區分。</p>
       </section>
+      {data.length > 1 && <DiffTable title="假設差異（以第一個勾選之情境為基準）" names={data.map((d) => d.sc.name)} diffs={assumptionDiff(data.map((d) => d.g))} graphs={data.map((d) => d.g)} />}
       <table className="grid stmt">
         <thead><tr><th>指標</th><th>情境</th>{years.map((y) => <th key={y} className="forecast">{y}</th>)}</tr></thead>
         <tbody>
@@ -112,6 +115,34 @@ export function ComparePage() {
         </tbody>
       </table>
     </div>
+  );
+}
+
+export function DiffTable({ title, names, diffs, graphs }: { title: string; names: string[]; diffs: AssumpDiff[]; graphs: Graph[] }) {
+  const { p } = useP();
+  const fmt = (d: AssumpDiff, v: any) => {
+    const row = graphs.map((g) => g.byId.get(d.rowId)).find(Boolean);
+    return v === null || v === undefined ? '—' : fmtVal(v, row?.format ?? 'amount', p.settings.unit);
+  };
+  return (
+    <section className="card">
+      <h3>{title}</h3>
+      {diffs.length === 0 ? <p className="ok">假設及覆寫完全相同。</p> : (
+        <div className="grid-wrap">
+          <table className="grid">
+            <thead><tr><th>工作表</th><th>項目</th><th>年度</th>{names.map((n) => <th key={n}>{n}</th>)}</tr></thead>
+            <tbody>
+              {diffs.map((d, i) => (
+                <tr key={i}>
+                  <td className="muted small">{d.sheet}</td><td>{d.label}</td><td>{d.year}</td>
+                  {d.values.map((v, k) => <td key={k} className={`num ${k > 0 && v !== d.values[0] ? 'changed' : ''}`}>{fmt(d, v)}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }
 

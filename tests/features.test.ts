@@ -68,3 +68,19 @@ describe('input sanity', () => {
     expect(clean).toEqual([]);
   });
 });
+
+import { assumptionDiff } from '../src/engine/diff';
+import { cloneScenario } from '../src/engine/project';
+describe('假設差異', () => {
+  it('列出不同情境之假設與覆寫差異', () => {
+    const p = sampleProject();
+    const a = p.scenarios[0];
+    const b = cloneScenario(a, '保守');
+    b.a.growth[1] = 0.02;
+    b.overrides['c:cogs'] = { 3: 1 };
+    const d = assumptionDiff([buildGraph(p, a).g, buildGraph(p, b).g]);
+    expect(d.map((x) => `${x.rowId}@${x.year}`).sort()).toEqual(['a:growth@2027', 'c:cogs@2029']);
+    expect(d.find((x) => x.rowId === 'a:growth')!.values).toEqual([0.07, 0.02]);
+    expect(assumptionDiff([buildGraph(p, a).g, buildGraph(p, a).g])).toEqual([]);
+  });
+});

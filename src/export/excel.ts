@@ -1,7 +1,7 @@
 // 計算圖 → .xlsx（公式可在 Excel 重算）
 import ExcelJS from 'exceljs';
 import { Graph, EvalResult, exprToExcel, colLetter, exprToText, Row } from '../engine/graph';
-import { SH, STATEMENT_SHEETS } from '../engine/model';
+import { SH, STATEMENT_SHEETS, isZeroRow } from '../engine/model';
 import { Project, Scenario, defaultPeriodText } from '../engine/project';
 import { reportStatus, Issue } from '../engine/checks';
 
@@ -125,6 +125,8 @@ export async function buildWorkbook(o: ExportOptions): Promise<ExcelJS.Workbook>
       if (r.style === 'header') xr.getCell(1).font = { bold: true };
       if (r.style === 'subtotal' || r.style === 'total') xr.font = { bold: true };
       if (r.hidden && name === SH.base) xr.hidden = true;
+      // 銀行版：正式報表隱藏全部年度皆為零之科目列（公式保留，取消隱藏即可檢視）
+      if (mode === 'bank' && (isStmt || name === SH.ratio) && isZeroRow(r, ev, g.columns.length)) xr.hidden = true;
       const numFmt = r.format === 'amount' ? amtFmt : r.format === 'pct' ? '0.00%' : r.format === 'ratio' ? '#,##0.####' : r.format === 'times' ? '0.00"倍"' : r.format === 'days' || r.format === 'month' || r.format === 'years' ? '0' : undefined;
       r.cells.forEach((cell, ci) => {
         if (!cell) return;

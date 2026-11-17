@@ -1,19 +1,9 @@
 import { useState } from 'react';
 import { useP, fmtVal, unitLabel } from '../ctx';
 import { STATEMENT_SHEETS, SH } from '../../engine/model';
-import { Row } from '../../engine/graph';
 
-export function isZeroRow(r: Row, ev: any, ncol: number) {
-  if (r.style === 'header' || r.style === 'total' || r.style === 'subtotal') return false;
-  for (let c = 0; c < ncol; c++) {
-    const cell = r.cells[c];
-    if (!cell) continue;
-    if (cell.kind === 'na') continue;
-    const v = ev.value(r.id, c);
-    if (typeof v === 'number' && Math.abs(v) >= (r.format === 'amount' ? 0.5 : 1e-9)) return false;
-  }
-  return true;
-}
+export { isZeroRow } from '../../engine/model';
+import { isZeroRow } from '../../engine/model';
 
 export function StatementTable({ sheet, labels, onLabel }: { sheet: string; labels?: Record<string, string>; onLabel?: (id: string, v: string) => void }) {
   const { g, ev, p, trace } = useP();
