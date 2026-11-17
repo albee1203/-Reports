@@ -7,8 +7,9 @@ import { reportStatus, Issue } from '../engine/checks';
 
 export type ExportMode = 'internal' | 'bank';
 
-const FIRST_DATA_COL = 3; // A=項目, B=說明, C 起為資料欄（0-based index 2）
-const HEADER_ROWS = 4;
+export const ID_HEADER = '列代碼';
+export const FIRST_DATA_COL = 3; // A=項目, B=說明, C 起為資料欄（0-based index 2）
+export const HEADER_ROWS = 4;
 
 const FILL = (argb: string): ExcelJS.Fill => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
 const STY = {
@@ -109,10 +110,15 @@ export async function buildWorkbook(o: ExportOptions): Promise<ExcelJS.Workbook>
     });
     ws.getCell(HEADER_ROWS, 1).value = '項目';
     ws.getCell(HEADER_ROWS, 2).value = isStmt ? '' : '說明／方法';
+    // 隱藏「列代碼」欄：讀回 Excel 修改時用以對應 App 之列
+    const idCol = FIRST_DATA_COL + g.columns.length;
+    ws.getCell(HEADER_ROWS, idCol).value = ID_HEADER;
+    ws.getColumn(idCol).hidden = true;
     ws.getRow(HEADER_ROWS).font = { bold: true };
 
     rs.forEach((r) => {
       const rn = pos.get(r.id)!.row;
+      ws.getRow(rn).getCell(idCol).value = r.id;
       const xr = ws.getRow(rn);
       xr.getCell(1).value = (r.indent ? '　'.repeat(r.indent) : '') + labelOf(r);
       if (!isStmt && r.desc) xr.getCell(2).value = r.desc;
@@ -186,6 +192,7 @@ function writeCover(ws: ExcelJS.Worksheet, o: ExportOptions, status: string, uni
   const lines: [string, string][] = [
     ['公司名稱', s.companyName],
     ['統一編號', s.taxId || '—'],
+    ['專案代碼', `${p.id}／${o.scenario.id}`],
     ['匯出模式', o.mode === 'bank' ? '銀行送件版' : '內部預估版'],
     ['情境', o.scenario.name],
     ['基期年度（實際）', String(s.baseYear)],

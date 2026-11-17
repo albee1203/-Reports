@@ -3,6 +3,7 @@ import { useP, unitLabel } from '../ctx';
 import { download, snapshot, restoreVersion } from '../store';
 import { reportStatus } from '../../engine/checks';
 import { PrintView } from './Bank';
+import { ReadBackSection } from './ReadBack';
 
 export function ExportPage() {
   const { p, sc, g, ev, issues, bankIssues, update } = useP();
@@ -30,6 +31,7 @@ export function ExportPage() {
         </div>
         <p className="hint">內部預估版不含財報附註。勾稽檢查工作表供內部查閱，不在正式報表列印範圍內。</p>
       </section>
+      <ReadBackSection />
       <section className="card">
         <h2>PDF（銀行版，選用）</h2>
         <p className="muted small">A4，依報表寬度自動直式／橫式；含空白簽章欄，無頁碼。</p>

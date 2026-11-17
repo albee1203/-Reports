@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { useP, fmtVal } from '../ctx';
 import { NumInput } from '../Grid';
 import { allAccounts, SECTION_NAMES, Section, AccountDef, CfClass } from '../../engine/coa';
-import { readFile, SheetData, guessLayout, buildLines, newRawImport, applyImport, remapLine, reconcileSubtotals, MapConfig } from '../../engine/importer';
+import { readFile, SheetData, guessLayout, buildLines, newRawImport, applyImport, remapLine, reconcileSubtotals, MapConfig, parseAmount } from '../../engine/importer';
+import { matchCfRow, CF_TOTAL_ROWS } from '../../engine/cfImport';
 import { Project, YearData, emptyYear, yearAmount, recomputeYearAccounts, uid } from '../../engine/project';
 import { SH } from '../../engine/model';
 
@@ -219,15 +220,33 @@ function AccountSummary({ y }: { y: YearData }) {
 function BaseExtraStatements() {
   const { g, p, update } = useP();
   const rows = (sheet: string) => g.rows.filter((r) => r.sheet === sheet && !['cf:close'].includes(r.id) && !/_close$|t_close/.test(r.id));
+  // 自 Excel 複製一欄數字，依序填入下方各列（略過標題列）
+  const onPaste = (e: React.ClipboardEvent, sheet: string, key: 'cfActual' | 'sceActual', startId: string, title: string) => {
+    const text = e.clipboardData.getData('text/plain').replace(/\r/g, '').replace(/\n$/, '');
+    if (!text.includes('\n')) return;
+    e.preventDefault();
+    const list = rows(sheet).filter((r) => r.style !== 'header');
+    const i0 = list.findIndex((r) => r.id === startId);
+    const vals = text.split('\n').map((l) => l.split('\t').pop() ?? '');
+    update((np) => {
+      vals.forEach((raw, k) => {
+        const r = list[i0 + k];
+        if (!r) return;
+        const pa = parseAmount(raw);
+        if (pa.error) return;
+        if (pa.value === null) delete np.base[key][r.id]; else np.base[key][r.id] = pa.value;
+      });
+    }, { action: `貼上基期${title}`, detail: `${vals.length} 列` });
+  };
   const block = (sheet: string, key: 'cfActual' | 'sceActual', title: string) => (
     <div>
-      <h3>{title}</h3>
+      <h3>{title} <button className="mini danger" onClick={() => confirm(`清除基期${title}全部實際數？`) && update((np) => { np.base[key] = {}; }, { action: `清除基期${title}`, detail: '' })}>清除</button></h3>
       <table className="grid">
         <tbody>
           {rows(sheet).map((r) => (
             <tr key={r.id} className={r.style ?? ''}>
               <td style={{ paddingLeft: 6 + (r.indent ?? 0) * 12 }}>{r.label}</td>
-              {r.style === 'header' ? <td /> : <td className="in"><NumInput value={p.base[key][r.id] ?? null} placeholder="未提供" onCommit={(v) => update((np) => { if (v === null) delete np.base[key][r.id]; else np.base[key][r.id] = v; }, { action: `補入基期${title}`, detail: `${r.label}：${v ?? '清除'}` })} /></td>}
+              {r.style === 'header' ? <td /> : <td className="in" onPasteCapture={(e) => onPaste(e, sheet, key, r.id, title)}><NumInput value={p.base[key][r.id] ?? null} placeholder="未提供" onCommit={(v) => update((np) => { if (v === null) delete np.base[key][r.id]; else np.base[key][r.id] = v; }, { action: `補入基期${title}`, detail: `${r.label}：${v ?? '清除'}` })} /></td>}
             </tr>
           ))}
         </tbody>
@@ -237,11 +256,77 @@ function BaseExtraStatements() {
   return (
     <section className="card">
       <h2>基期現金流量表／權益變動表實際數（選填）</h2>
-      <p className="muted small">只提供損益表及資產負債表時，基期現金流量表與權益變動表顯示「未提供」；可於取得實際報表後補入。期末數依基期資產負債表自動帶入。</p>
+      <p className="muted small">只提供損益表及資產負債表時，基期現金流量表與權益變動表顯示「未提供」；可於取得實際報表後補入。期末數依基期資產負債表自動帶入。可自 Excel 複製一欄數字貼到第一格，依序填入下方各列。流出請以負數或括號表示。</p>
+      <CfImport />
       <div className="two-col">
         {block(SH.cf, 'cfActual', '現金流量表')}
         {block(SH.sce, 'sceActual', '權益變動表')}
       </div>
     </section>
+  );
+}
+
+function CfImport() {
+  const { g, p, update } = useP();
+  const [file, setFile] = useState<{ name: string; sheets: SheetData[] } | null>(null);
+  const [si, setSi] = useState(0);
+  const [lay, setLay] = useState({ headerRow: 0, labelCol: 0, amountCol: 1 });
+  const [unit, setUnit] = useState(1);
+  const [map, setMap] = useState<Record<number, string>>({});
+  const cfRows = g.rows.filter((r) => r.sheet === SH.cf && r.style !== 'header');
+  const sheet = file?.sheets[si];
+  const lines = sheet ? sheet.rows.map((r, i) => ({ i, label: String(r[lay.labelCol] ?? '').trim(), raw: String(r[lay.amountCol] ?? '').trim() })).filter((l) => l.i > lay.headerRow && l.label && l.raw) : [];
+  const init = (sh: SheetData) => {
+    const L = guessLayout(sh.rows); setLay(L);
+    const m: Record<number, string> = {};
+    sh.rows.forEach((r, i) => { if (i > L.headerRow && r[L.labelCol]) { const id = matchCfRow(String(r[L.labelCol]), cfRows); if (id) m[i] = id; } });
+    setMap(m);
+  };
+  const onFile = async (f: File) => { const sheets = await readFile(f.name, await f.arrayBuffer()); setFile({ name: f.name, sheets }); setSi(0); init(sheets[0]); };
+  const sums: Record<string, number> = {};
+  const errors: string[] = [];
+  for (const l of lines) {
+    const id = map[l.i]; if (!id) continue;
+    const pa = parseAmount(l.raw);
+    if (pa.error || pa.value === null) { errors.push(`「${l.label}」金額格式錯誤`); continue; }
+    sums[id] = (sums[id] ?? 0) + pa.value * unit;
+  }
+  // 小計核對：營業／投資／籌資明細合計 vs 原表小計
+  const sect = (from: string, to: string) => { const ids = cfRows.map((r) => r.id); return ids.slice(ids.indexOf(from) + 1, ids.indexOf(to)).filter((x) => !CF_TOTAL_ROWS.has(x)); };
+  const checks = [['cf:op', sect('cf:pbt', 'cf:op').concat(['cf:pbt'])], ['cf:inv', sect('cf:op', 'cf:inv')], ['cf:fin', sect('cf:inv', 'cf:fin')]] as [string, string[]][];
+  const recon = checks.filter(([t]) => sums[t] !== undefined).map(([t, ids]) => ({ t, total: sums[t], detail: ids.reduce((a, x) => a + (sums[x] ?? 0), 0) }));
+  const apply = () => update((np) => { np.base.cfActual = { ...sums }; }, { action: '匯入基期現金流量表', detail: `${file!.name}：${Object.keys(sums).length} 列` });
+  return (
+    <div className="subcard">
+      <label className="file">匯入基期現金流量表（.xlsx、.csv）<input type="file" accept=".xlsx,.csv,.txt" onChange={(e) => { if (e.target.files?.[0]) onFile(e.target.files[0]); e.target.value = ''; }} /></label>
+      {file && sheet && (
+        <div>
+          <div className="form compact">
+            <label>工作表<select value={si} onChange={(e) => { setSi(+e.target.value); init(file.sheets[+e.target.value]); }}>{file.sheets.map((s, i) => <option key={i} value={i}>{s.name}</option>)}</select></label>
+            <label>科目欄<select value={lay.labelCol} onChange={(e) => setLay({ ...lay, labelCol: +e.target.value })}>{colOpts(sheet)}</select></label>
+            <label>金額欄<select value={lay.amountCol} onChange={(e) => setLay({ ...lay, amountCol: +e.target.value })}>{colOpts(sheet)}</select></label>
+            <label>金額單位<select value={unit} onChange={(e) => setUnit(+e.target.value)}><option value={1}>元</option><option value={1000}>千元</option></select></label>
+          </div>
+          <table className="grid map">
+            <thead><tr><th>原始科目</th><th>金額</th><th>對應至</th></tr></thead>
+            <tbody>
+              {lines.map((l) => (
+                <tr key={l.i} className={map[l.i] ? '' : 'skip'}>
+                  <td>{l.label}</td><td className="num">{l.raw}</td>
+                  <td><select className={map[l.i] ? '' : 'missing'} value={map[l.i] ?? ''} onChange={(e) => setMap({ ...map, [l.i]: e.target.value })}>
+                    <option value="">（略過）</option>
+                    {cfRows.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+                  </select></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="hint">多個原始科目對應同一列時金額加總。未對應之科目（例如本 App 未個別列示之調整項目）請對應至最接近之列或略過；略過者不會計入。</p>
+          {recon.map((x) => <p key={x.t} className={Math.abs(x.total - x.detail) >= 1 ? 'warn' : 'ok'}>{cfRows.find((r) => r.id === x.t)?.label}：原表 {fmtVal(x.total, 'amount', 'yuan')}，明細合計 {fmtVal(x.detail, 'amount', 'yuan')}{Math.abs(x.total - x.detail) >= 1 ? `，差額 ${fmtVal(x.total - x.detail, 'amount', 'yuan')}（請檢查略過之科目）` : ' ✓'}</p>)}
+          {errors.map((x, i) => <p key={i} className="warn">⚠ {x}</p>)}
+          <button className="primary" disabled={!Object.keys(sums).length} onClick={() => { if (!Object.keys(p.base.cfActual).length || confirm('將取代目前之基期現金流量表實際數，確定？')) { apply(); setFile(null); } }}>套用（取代目前基期現金流量表）</button> <button onClick={() => setFile(null)}>取消</button>
+        </div>
+      )}
+    </div>
   );
 }
