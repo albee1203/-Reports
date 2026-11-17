@@ -7,6 +7,8 @@ import { buildGraph } from '../src/engine/model';
 import { evaluate, colLetter } from '../src/engine/graph';
 import { collectIssues } from '../src/engine/checks';
 import { buildWorkbook } from '../src/export/excel';
+import { detailProject } from './fixtures';
+import { emptyYear } from '../src/engine/project';
 
 // LibreOffice 設定為載入 xlsx 時一律重算（模擬 Excel 之 fullCalcOnLoad）
 const LO_PROFILE = `${process.cwd()}/tests/out/lo-profile`;
@@ -22,6 +24,20 @@ describe('excel parity (LibreOffice recalculation)', () => {
     const p = sampleProject();
     const sc = p.scenarios[0];
     sc.overrides['w:ar'] = { 2: 60_000_000 };
+    await parity(p, sc);
+  });
+  it('parity with asset detail, capital timing and comparatives', async () => {
+    const { p } = detailProject();
+    const sc = p.scenarios[0];
+    sc.a.equity.capPar = [0, 20_000_000, 0, 0, 0];
+    sc.a.equity.capCash = [5_000_000, null, null, null, null];
+    p.comparatives.push({ ...emptyYear(2024), manual: { cash: 30_000_000, revenue: 280_000_000, cogs: 210_000_000, capital: 60_000_000 } });
+    await parity(p, sc);
+  });
+});
+
+async function parity(p: any, sc: any) {
+  {
     const { g, info } = buildGraph(p, sc);
     const ev = evaluate(g);
     const issues = collectIssues(p, sc, g, ev, info);
@@ -51,8 +67,8 @@ describe('excel parity (LibreOffice recalculation)', () => {
     }
     console.log('checked formulas', checked, 'mismatches', bad.length, bad.slice(0, 15));
     expect(bad).toEqual([]);
-  });
-});
+  }
+}
 
 describe('excel what-if', () => {
   it('editing an assumption in Excel keeps statements reconciled', async () => {

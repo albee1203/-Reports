@@ -66,6 +66,7 @@ export function setPath(p: Project, scenarioId: string, path: string, value: any
   else if (parts[0] === 'loans') { obj = sc.loans.find((l) => l.id === parts[1]); parts.splice(0, 2); }
   else if (parts[0] === 'settings') { obj = p.settings; parts.shift(); }
   else if (parts[0] === 'faBase') { obj = p.faBase; parts.shift(); }
+  else if (parts[0] === 'faAssets') { obj = (p.faAssets ?? []).find((x) => x.id === parts[1]); parts.splice(0, 2); }
   else throw new Error('未知路徑 ' + path);
   for (let i = 0; i < parts.length - 1; i++) obj = obj[parts[i]];
   const k = parts[parts.length - 1];
@@ -83,6 +84,7 @@ export function getPath(p: Project, scenarioId: string, path: string): any {
   else if (parts[0] === 'loans') { obj = sc.loans.find((l) => l.id === parts[1]); parts.splice(0, 2); }
   else if (parts[0] === 'settings') { obj = p.settings; parts.shift(); }
   else if (parts[0] === 'faBase') { obj = p.faBase; parts.shift(); }
+  else if (parts[0] === 'faAssets') { obj = (p.faAssets ?? []).find((x) => x.id === parts[1]); parts.splice(0, 2); }
   for (const k of parts) obj = obj?.[k];
   return obj;
 }

@@ -15,6 +15,7 @@ export const SH = {
   wc: '營運資金',
   oth: '其他科目',
   fa: '固定資產',
+  fad: '固定資產明細',
   loan: '借款',
   taxeq: '所得稅及權益',
   is: '綜合損益表',
@@ -164,6 +165,7 @@ export function buildGraph(p: Project, sc: Scenario): { g: Graph; info: ModelInf
   // ===== 權益假設 =====
   irow(SH.assump, 'a:cap_par', '現金增資－股本（面額）', 'amount', A.equity.capPar, 'a.equity.capPar', { required: true });
   irow(SH.assump, 'a:cap_prem', '現金增資－溢價（資本公積）', 'amount', A.equity.capPremium, 'a.equity.capPremium', { required: true });
+  irow(SH.assump, 'a:cap_cash', '增資款當年度收現（空白＝同認列額）', 'amount', A.equity.capCash, 'a.equity.capCash', { desc: '收現早於認列列為預收股本；晚於認列列為應收股款' });
   irow(SH.assump, 'a:div', '宣告現金股利', 'amount', A.equity.dividend, 'a.equity.dividend', { required: true });
   irow(SH.assump, 'a:div_pct', '現金股利當年度支付比例', 'pct', A.equity.divPaidPct, 'a.equity.divPaidPct', { required: true });
   irow(SH.assump, 'a:oci', '其他綜合損益（稅後）', 'amount', A.equity.oci, 'a.equity.oci', { required: true, desc: st.ociAccount ? `對應科目：${accts.find((a) => a.code === st.ociAccount)?.name}` : '未指定對應科目（非零時資產負債表將不平衡）' });
@@ -176,6 +178,27 @@ export function buildGraph(p: Project, sc: Scenario): { g: Graph; info: ModelInf
     const pl = sc.fa[cl.key];
     const path = `fa.${cl.key}`;
     const nm = cl.name;
+    // 逐筆資產明細（有匯入明細之類別，既有資產折舊依明細計算）
+    const assets = (p.faAssets ?? []).filter((x) => x.cls === cl.key);
+    const detail = assets.length > 0;
+    for (const x of assets) {
+      const d = (f: string) => `d:${x.id}:${f}`;
+      const ap = `faAssets.${x.id}`;
+      addRow(SH.fad, d('hdr'), `【${nm}】${x.name}${x.acquired ? `（取得 ${x.acquired}）` : ''}`, 'text', Array(ncol).fill(null), { style: 'header' });
+      prow(SH.fad, d('cost'), `${x.name}－原始成本`, 'amount', x.cost, `${ap}.cost`, { required: true });
+      prow(SH.fad, d('acc'), `${x.name}－累計折舊`, 'amount', x.accDep, `${ap}.accDep`, {});
+      prow(SH.fad, d('imp'), `${x.name}－累計減損`, 'amount', x.accImp, `${ap}.accImp`, {});
+      if (cl.depreciable) {
+        prow(SH.fad, d('resid'), `${x.name}－殘值`, 'amount', x.residual, `${ap}.residual`, {});
+        prow(SH.fad, d('rlife'), `${x.name}－剩餘耐用年限（年）`, 'years', x.remLife, `${ap}.remLife`, { required: (x.cost ?? 0) - (x.accDep ?? 0) - (x.accImp ?? 0) - (x.residual ?? 0) > 0.5, desc: x.remLifeNote });
+        frow(SH.fad, d('dep'), `${x.name}－折舊`, 'amount', (c) => {
+          const depBase = sub(sub(sub(P(d('cost')), P(d('acc'))), P(d('imp'))), P(d('resid')));
+          const remaining = c === cb + 1 ? depBase : sub(depBase, range(d('dep'), cb + 1, c - 1));
+          return max(n(0), min(div(depBase, P(d('rlife'))), remaining));
+        }, { desc: '(成本−累計折舊−累計減損−殘值)÷剩餘耐用年限，直線法' });
+      }
+    }
+    const dsum = (f: string, c: number) => add(...assets.map((x) => r(`d:${x.id}:${f}`, c)));
     addRow(SH.fa, `f:${cl.key}:hdr`, `【${nm}】`, 'text', Array(ncol).fill(null), { style: 'header' });
     irow(SH.fa, fa(cl.key, 'capex'), `${nm}－資本支出認列額`, 'amount', pl.capex, `${path}.capex`, {});
     irow(SH.fa, fa(cl.key, 'paid'), `${nm}－資本支出付款額（空白＝同認列額）`, 'amount', pl.paid, `${path}.paid`, {});
@@ -193,7 +216,10 @@ export function buildGraph(p: Project, sc: Scenario): { g: Graph; info: ModelInf
     irow(SH.fa, fa(cl.key, 'drecv'), `${nm}－處分當年度收現（空白＝同價款）`, 'amount', pl.dispReceived, `${path}.dispReceived`, {});
     if (cl.depreciable) irow(SH.fa, fa(cl.key, 'dred'), `${nm}－處分後減少之折舊`, 'amount', pl.dispDepReduce, `${path}.dispDepReduce`, {});
     irow(SH.fa, fa(cl.key, 'imp'), `${nm}－減損損失`, 'amount', pl.impairment, `${path}.impairment`, {});
-    if (cl.depreciable) {
+    if (cl.depreciable && detail) {
+      frow(SH.fa, fa(cl.key, 'exdep'), `${nm}－既有資產折舊（逐筆明細合計）`, 'amount', (c) => dsum('dep', c), { desc: `依「${SH.fad}」${assets.length} 筆資產計算` });
+    }
+    if (cl.depreciable && !detail) {
       prow(SH.fa, fa(cl.key, 'exm'), `${nm}－既有資產折舊方式`, 'text', b.existingMethod, `faBase.${cl.key}.existingMethod`, { required: true, options: [M.EXDEP_EST, M.EXDEP_MANUAL] });
       const est = b.existingMethod === M.EXDEP_EST;
       prow(SH.fa, fa(cl.key, 'dnbv'), `${nm}－既有資產可折舊淨額（經確認）`, 'amount', b.depreciableNbv, `faBase.${cl.key}.depreciableNbv`, { required: est, desc: '概估' });
@@ -206,6 +232,8 @@ export function buildGraph(p: Project, sc: Scenario): { g: Graph; info: ModelInf
         const remaining = c === cb + 1 ? depBase : sub(depBase, range(fa(cl.key, 'exdep'), cb + 1, c - 1));
         return iff(eq(P(fa(cl.key, 'exm')), s(M.EXDEP_MANUAL)), r(fa(cl.key, 'mdep'), c), max(n(0), min(annual, remaining)));
       }, { desc: est ? '估算＝(可折舊淨額−殘值)÷剩餘耐用年限，概估' : '逐年手動輸入' });
+    }
+    if (cl.depreciable) {
       // 新增資產（各年度取得之批次）
       for (let k = 0; k < N; k++) {
         const ck = cb + 1 + k;
@@ -226,10 +254,10 @@ export function buildGraph(p: Project, sc: Scenario): { g: Graph; info: ModelInf
     frow(SH.fa, fa(cl.key, 'cost'), `${nm}－成本${nature ? '（僅淨額，以淨額列示）' : ''}`, 'amount', (c) => {
       if (cl.cip) return sub(add(prev(fa(cl.key, 'cost'), c), r(fa(cl.key, 'capex'), c)), add(...faClasses.filter((x) => !x.cip).map((x) => r(fa(x.key, 'tin'), c))));
       return sub(add(prev(fa(cl.key, 'cost'), c), r(fa(cl.key, 'capex'), c), r(fa(cl.key, 'tin'), c)), r(fa(cl.key, 'dcost'), c));
-    }, { base: baseIn(nature ? b.nbv : b.cost, `faBase.${cl.key}.${nature ? 'nbv' : 'cost'}`) });
+    }, { base: detail ? (c) => dsum('cost', c) : baseIn(nature ? b.nbv : b.cost, `faBase.${cl.key}.${nature ? 'nbv' : 'cost'}`) });
     frow(SH.fa, fa(cl.key, 'accdep'), `${nm}－累計折舊`, 'amount', (c) =>
-      sub(add(prev(fa(cl.key, 'accdep'), c), cl.depreciable ? r(fa(cl.key, 'dep'), c) : n(0)), r(fa(cl.key, 'dacc'), c)), { base: nature ? () => n(0) : baseIn(b.accDep, `faBase.${cl.key}.accDep`) });
-    frow(SH.fa, fa(cl.key, 'accimp'), `${nm}－累計減損`, 'amount', (c) => add(prev(fa(cl.key, 'accimp'), c), r(fa(cl.key, 'imp'), c)), { base: nature ? () => n(0) : baseIn(b.accImp, `faBase.${cl.key}.accImp`) });
+      sub(add(prev(fa(cl.key, 'accdep'), c), cl.depreciable ? r(fa(cl.key, 'dep'), c) : n(0)), r(fa(cl.key, 'dacc'), c)), { base: detail ? (c) => dsum('acc', c) : nature ? () => n(0) : baseIn(b.accDep, `faBase.${cl.key}.accDep`) });
+    frow(SH.fa, fa(cl.key, 'accimp'), `${nm}－累計減損`, 'amount', (c) => add(prev(fa(cl.key, 'accimp'), c), r(fa(cl.key, 'imp'), c)), { base: detail ? (c) => dsum('imp', c) : nature ? () => n(0) : baseIn(b.accImp, `faBase.${cl.key}.accImp`) });
     frow(SH.fa, fa(cl.key, 'nbv'), `${nm}－帳面淨額`, 'amount', (c) => sub(sub(r(fa(cl.key, 'cost'), c), r(fa(cl.key, 'accdep'), c)), r(fa(cl.key, 'accimp'), c)), { base: (c) => sub(sub(r(fa(cl.key, 'cost'), c), r(fa(cl.key, 'accdep'), c)), r(fa(cl.key, 'accimp'), c)), style: 'subtotal' });
     frow(SH.fa, fa(cl.key, 'gain'), `${nm}－處分損益`, 'amount', (c) => sub(r(fa(cl.key, 'dproc'), c), sub(r(fa(cl.key, 'dcost'), c), r(fa(cl.key, 'dacc'), c))));
     frow(SH.fa, fa(cl.key, 'paidEff'), `${nm}－資本支出實際付款`, 'amount', (c) => iff(fn('ISBLANK', r(fa(cl.key, 'paid'), c)), r(fa(cl.key, 'capex'), c), r(fa(cl.key, 'paid'), c)));
@@ -385,6 +413,9 @@ export function buildGraph(p: Project, sc: Scenario): { g: Graph; info: ModelInf
   // ===== 權益 =====
   frow(SH.taxeq, 'e:capital', '股本', 'amount', (c) => add(prev('e:capital', c), r('a:cap_par', c)), { base: (c) => AC('capital', c) });
   frow(SH.taxeq, 'e:cs', '資本公積', 'amount', (c) => add(prev('e:cs', c), r('a:cap_prem', c)), { base: (c) => AC('cap_surplus', c) });
+  frow(SH.taxeq, 'e:cap_rec', '增資認列額（股本＋溢價）', 'amount', (c) => add(r('a:cap_par', c), r('a:cap_prem', c)));
+  frow(SH.taxeq, 'e:cap_cash', '增資實際收現', 'amount', (c) => iff(fn('ISBLANK', r('a:cap_cash', c)), r('e:cap_rec', c), r('a:cap_cash', c)));
+  frow(SH.taxeq, 'e:cap_adv', '預收股本（負數為應收股款）', 'amount', (c) => add(prev('e:cap_adv', c), sub(r('e:cap_cash', c), r('e:cap_rec', c))), { base: (c) => AC('cap_adv', c) });
   frow(SH.taxeq, 'e:re', '保留盈餘', 'amount', (c) => sub(add(prev('e:re', c), r('is:ni', c)), r('a:div', c)), { base: (c) => AC('re', c) });
   frow(SH.taxeq, 'e:oe', '其他權益', 'amount', (c) => add(prev('e:oe', c), r('a:oci', c)), { base: (c) => AC('other_eq', c) });
   frow(SH.taxeq, 'e:div_paid', '現金股利支付', 'amount', (c) => add(prev('e:div_pay', c), mul(r('a:div', c), r('a:div_pct', c))));
@@ -445,7 +476,7 @@ export function buildGraph(p: Project, sc: Scenario): { g: Graph; info: ModelInf
   cfRow('cf:repay', '償還借款', (c) => neg(r('l:repay', c)), { indent: 1 });
   const finLines = ['cf:draw', 'cf:repay'];
   if (!intOp) { cfRow('cf:intpaid', '支付之利息', (c) => neg(r('l:ipaid', c)), { indent: 1 }); finLines.push('cf:intpaid'); }
-  cfRow('cf:capinc', '現金增資', (c) => add(r('a:cap_par', c), r('a:cap_prem', c)), { indent: 1 });
+  cfRow('cf:capinc', '現金增資', (c) => r('e:cap_cash', c), { indent: 1 });
   cfRow('cf:divpaid', '發放現金股利', (c) => neg(r('e:div_paid', c)), { indent: 1 });
   finLines.push('cf:capinc', 'cf:divpaid');
   for (const a of otherBS.filter((a) => clsOf(a) === 'financing')) {
@@ -479,6 +510,7 @@ export function buildGraph(p: Project, sc: Scenario): { g: Graph; info: ModelInf
     ltd: { label: '長期借款', f: (c) => r('l:long_nc', c), b: (c) => AC('ltd', c) },
     capital: { label: '股本', f: (c) => r('e:capital', c), b: (c) => AC('capital', c) },
     cap_surplus: { label: '資本公積', f: (c) => r('e:cs', c), b: (c) => AC('cap_surplus', c) },
+    cap_adv: { label: '預收股本（應收股款）', f: (c) => r('e:cap_adv', c), b: (c) => AC('cap_adv', c) },
     re: { label: '保留盈餘', f: (c) => r('e:re', c), b: (c) => AC('re', c) },
     other_eq: { label: '其他權益', f: (c) => r('e:oe', c), b: (c) => AC('other_eq', c) },
   };
@@ -487,7 +519,7 @@ export function buildGraph(p: Project, sc: Scenario): { g: Graph; info: ModelInf
     NCA: ['lt_invest', 'ppe', 'inv_property', 'intangible', 'rou_asset', 'dta', 'other_nca'],
     CL: ['st_loan', 'st_notes', 'notes_pay', 'ap', 'other_pay', 'int_pay', 'div_pay', 'equip_pay', 'tax_pay', 'contract_liab', 'ltd_cur', 'lease_liab_cur', 'other_cl'],
     NCL: ['ltd', 'dtl', 'lease_liab', 'other_ncl'],
-    EQ: ['capital', 'cap_surplus', 're', 'other_eq', 'treasury'],
+    EQ: ['capital', 'cap_surplus', 'cap_adv', 're', 'other_eq', 'treasury'],
   };
   const secRows: Record<string, string[]> = {};
   const SECTION_LABEL: Record<string, string> = { CA: '流動資產', NCA: '非流動資產', CL: '流動負債', NCL: '非流動負債', EQ: '權益' };
@@ -529,6 +561,7 @@ export function buildGraph(p: Project, sc: Scenario): { g: Graph; info: ModelInf
   };
   comp('cap', '股本', 'e:capital', (c) => AC('capital', c), [{ id: 'sce:cap_inc', label: '現金增資', f: (c) => r('a:cap_par', c) }]);
   comp('cs', '資本公積', 'e:cs', (c) => AC('cap_surplus', c), [{ id: 'sce:cs_inc', label: '現金增資溢價', f: (c) => r('a:cap_prem', c) }]);
+  comp('adv', '預收股本（應收股款）', 'e:cap_adv', (c) => AC('cap_adv', c), [{ id: 'sce:adv_chg', label: '增資收現與認列差額', f: (c) => sub(r('e:cap_cash', c), r('e:cap_rec', c)) }]);
   comp('re', '保留盈餘', 'e:re', (c) => AC('re', c), [
     { id: 'sce:re_ni', label: '本期淨利（淨損）', f: (c) => r('is:ni', c) },
     { id: 'sce:re_div', label: '現金股利', f: (c) => neg(r('a:div', c)) },
@@ -536,10 +569,10 @@ export function buildGraph(p: Project, sc: Scenario): { g: Graph; info: ModelInf
   comp('oe', '其他權益', 'e:oe', (c) => AC('other_eq', c), [{ id: 'sce:oe_oci', label: '本期其他綜合損益', f: (c) => r('is:oci', c) }]);
   if (otherEqAccts.length) comp('ot', '其他權益項目（庫藏股等）', '', (c) => oeItems(c, true), [{ id: 'sce:ot_chg', label: '本期變動', f: (c) => sub(oeItems(c, false), oeItems(c - 1, c - 1 === cb)) }]);
   addRow(SH.sce, 'sce:h_total', '權益總額', 'text', Array(ncol).fill(null), { style: 'header' });
-  const keys = ['cap', 'cs', 're', 'oe', ...(otherEqAccts.length ? ['ot'] : [])];
+  const keys = ['cap', 'cs', 'adv', 're', 'oe', ...(otherEqAccts.length ? ['ot'] : [])];
   sceRow('sce:t_open', '期初權益', (c) => add(...keys.map((k) => r(`sce:${k}_open`, c))), { indent: 1 });
   sceRow('sce:t_ci', '本期綜合損益總額', (c) => add(r('sce:re_ni', c), r('sce:oe_oci', c)), { indent: 1 });
-  sceRow('sce:t_owner', '與業主之交易（增資、股利）', (c) => add(r('sce:cap_inc', c), r('sce:cs_inc', c), r('sce:re_div', c)), { indent: 1 });
+  sceRow('sce:t_owner', '與業主之交易（增資、股利）', (c) => add(r('sce:cap_inc', c), r('sce:cs_inc', c), r('sce:adv_chg', c), r('sce:re_div', c)), { indent: 1 });
   if (otherEqAccts.length) sceRow('sce:t_other', '其他權益項目變動', (c) => r('sce:ot_chg', c), { indent: 1 });
   sceRow('sce:t_close', '期末權益', (c) => add(...keys.map((k) => r(`sce:${k}_close`, c))), { baseF: (c) => add(...keys.map((k) => r(`sce:${k}_close`, c))), style: 'total' });
 

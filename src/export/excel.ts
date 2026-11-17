@@ -53,7 +53,7 @@ export async function buildWorkbook(o: ExportOptions): Promise<ExcelJS.Workbook>
   const amtFmt = amountFormat(st.unit);
 
   // 列位置
-  const sheetsOrder = [SH.cover, SH.assump, SH.base, SH.raw, SH.rev, SH.wc, SH.oth, SH.fa, SH.loan, SH.taxeq, SH.is, SH.bs, SH.sce, SH.cf, SH.ck, ...(mode === 'bank' ? [SH.notes] : [])];
+  const sheetsOrder = [SH.cover, SH.assump, SH.base, SH.raw, SH.rev, SH.wc, SH.oth, SH.fa, ...(o.project.faAssets?.length ? [SH.fad] : []), SH.loan, SH.taxeq, SH.is, SH.bs, SH.sce, SH.cf, SH.ck, ...(mode === 'bank' ? [SH.notes] : [])];
   const pos = new Map<string, { sheet: string; row: number }>();
   const rowsBySheet = new Map<string, Row[]>();
   for (const r of g.rows) {

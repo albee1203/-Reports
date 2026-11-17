@@ -166,3 +166,7 @@ table.pt tr.total td { border-top: 0.5px solid #000; border-bottom: 2px double #
   .trace { position: fixed; right: 0; top: 0; z-index: 40; width: min(360px, 100vw); }
   .two-col { grid-template-columns: 1fr; }
 }
+
+table.fa-detail .num-input input { width: 104px; }
+table.fa-detail td.desc { min-width: 220px; }
+table.fa-detail td input:not(.num-input input) { width: 150px; }

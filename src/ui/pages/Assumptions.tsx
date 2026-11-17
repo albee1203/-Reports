@@ -4,6 +4,7 @@ import { SH } from '../../engine/model';
 import { FA_CLASSES, findAccount, CfClass } from '../../engine/coa';
 import { cloneScenario, defaultAssumptions, emptyLoan, uid, M, OTHER_METHODS } from '../../engine/project';
 import { Row } from '../../engine/graph';
+import { FaDetailSection } from './FaDetail';
 
 function ScenarioBar() {
   const { p, sc, update } = useP();
@@ -80,7 +81,9 @@ export function FixedAssetsPage() {
         </div>
         <p className="hint">既有資產折舊可選「逐年手動」輸入各年度折舊額，或「估算」＝(經確認之可折舊淨額−殘值)÷剩餘耐用年限（標示概估）。新增資產採直線法，取得年度依可供使用月份計提（13−月份）/12。土地不提折舊；未完工程不提折舊，完工時以「由在建工程轉入」轉列至目標類別。</p>
       </section>
-      <Grid sheet={SH.fa} title="固定資產排程" filter={(r) => !/:L\d+$/.test(r.id) || true} />
+      <FaDetailSection />
+      <Grid sheet={SH.fa} title="固定資產排程" />
+      {(p.faAssets ?? []).length > 0 && <Grid sheet={SH.fad} title="逐筆資產折舊計算" carry={false} />}
     </div>
   );
 }

@@ -93,6 +93,35 @@ function Workspace({ id, onClose }: { id: string; onClose: () => void }) {
   const [tr, setTr] = useState<{ row: string; col: number } | null>(null);
   const [saved, setSaved] = useState(true);
   const timer = useRef<any>(null);
+  const hist = useRef<{ past: Project[]; future: Project[]; lastKey: string; lastAt: number }>({ past: [], future: [], lastKey: '', lastAt: 0 });
+  const persist = (np: Project) => {
+    setSaved(false);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => saveProject(np).then(() => setSaved(true)), 400);
+  };
+  const undoRedo = (dir: 'undo' | 'redo') => setP((cur) => {
+    if (!cur) return cur;
+    const h = hist.current;
+    const from = dir === 'undo' ? h.past : h.future;
+    const to = dir === 'undo' ? h.future : h.past;
+    const target = from.pop();
+    if (!target) return cur;
+    to.push(cur);
+    h.lastKey = '';
+    const np: Project = { ...target, log: [...cur.log, { at: new Date().toISOString(), action: dir === 'undo' ? '復原' : '重做', detail: '' }] };
+    persist(np);
+    return np;
+  });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement;
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)) return; // 保留輸入框內建之復原
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undoRedo(e.shiftKey ? 'redo' : 'undo'); }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); undoRedo('redo'); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   useEffect(() => { loadProject(id).then((x) => { if (x) { x.scenarios.forEach((s) => syncScenarioWithBase(x, s)); setP(x); } }); }, [id]);
   const update: Ctx['update'] = (mut, log) => {
     setP((cur) => {
@@ -101,10 +130,15 @@ function Workspace({ id, onClose }: { id: string; onClose: () => void }) {
       mut(np);
       if (np.settings.years !== cur.settings.years) resizeProject(np, np.settings.years);
       np.scenarios.forEach((s) => syncScenarioWithBase(np, s));
+      // 復原紀錄：連續輸入同一欄位（1 秒內）合併為一步
+      const h = hist.current;
+      const key = log ? `${log.action}|${log.detail.split('：')[0]}` : 'misc';
+      const now = Date.now();
+      if (!(key === h.lastKey && now - h.lastAt < 1000)) { h.past.push(cur); if (h.past.length > 50) h.past.shift(); }
+      h.future = [];
+      h.lastKey = key; h.lastAt = now;
       if (log) { np.log.push({ at: new Date().toISOString(), scenario: np.scenarios.find((s) => s.id === np.activeScenarioId)?.name, ...log }); if (np.log.length > 3000) np.log.splice(0, np.log.length - 3000); }
-      setSaved(false);
-      clearTimeout(timer.current);
-      timer.current = setTimeout(() => saveProject(np).then(() => setSaved(true)), 400);
+      persist(np);
       return np;
     });
   };
@@ -146,6 +180,10 @@ function Workspace({ id, onClose }: { id: string; onClose: () => void }) {
             ))}
           </nav>
           <div className={`status st-${status}`}>報表狀態：{status}</div>
+          <div className="row undo">
+            <button className="mini" disabled={!hist.current.past.length} onClick={() => undoRedo('undo')} title="Ctrl+Z">↶ 復原</button>
+            <button className="mini" disabled={!hist.current.future.length} onClick={() => undoRedo('redo')} title="Ctrl+Y">↷ 重做</button>
+          </div>
           <div className="muted small">{saved ? '已儲存於本機' : '儲存中…'}</div>
         </aside>
         <main className="main">

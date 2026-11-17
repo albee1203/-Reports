@@ -69,6 +69,7 @@ export const DEFAULT_COA: AccountDef[] = [
   // 權益
   A('capital', '股本', 'BS', 'EQ', 'engine', ['股本', '普通股', '資本', '實收資本']),
   A('cap_surplus', '資本公積', 'BS', 'EQ', 'engine', ['資本公積']),
+  A('cap_adv', '預收股本（負數為應收股款）', 'BS', 'EQ', 'engine', ['預收股本', '預收股款'], { canBeNegative: true }),
   A('re', '保留盈餘', 'BS', 'EQ', 'engine', ['保留盈餘', '未分配盈餘', '法定盈餘公積', '特別盈餘公積', '累積虧損', '待彌補虧損'], { canBeNegative: true }),
   A('other_eq', '其他權益', 'BS', 'EQ', 'engine', ['其他權益', '其他綜合損益累計'], { canBeNegative: true }),
   A('treasury', '減：庫藏股票', 'BS', 'EQ', 'other', ['庫藏股'], { contra: true, cf: 'financing' }),

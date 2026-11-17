@@ -97,10 +97,10 @@ export function collectIssues(p: Project, sc: Scenario, g: Graph, ev: EvalResult
   }
   if (sc.a.ap.basis.some((b) => b === M.AP_COGS)) out.push({ level: 'info', category: '概估', item: '應付帳款', message: '以銷貨成本替代進貨額計算，屬概估' });
   const nbvBase = ev.num('bs:ppe', info.cb);
-  if (Math.abs(nbvBase) > 0 && !p.faNature) out.push({ level: 'warning', category: '假設', item: '固定資產餘額性質', message: '尚未確認基期固定資產餘額為「成本／累計折舊」或「僅淨額」', page: 'fixed' });
+  if (Math.abs(nbvBase) > 0 && !p.faNature && !(p.faAssets ?? []).length) out.push({ level: 'warning', category: '假設', item: '固定資產餘額性質', message: '尚未確認基期固定資產餘額為「成本／累計折舊」或「僅淨額」', page: 'fixed' });
   for (const cl of info.faClasses) {
     const b = p.faBase[cl.key];
-    if (cl.depreciable && b.existingMethod === M.EXDEP_EST) out.push({ level: 'info', category: '概估', item: `${cl.name}既有資產折舊`, message: `以可折舊淨額 ${fmt(b.depreciableNbv ?? 0)}、殘值 ${fmt(b.residual ?? 0)}、剩餘耐用 ${b.remainingLife ?? '—'} 年估算` });
+    if (cl.depreciable && b.existingMethod === M.EXDEP_EST && !(p.faAssets ?? []).some((x) => x.cls === cl.key)) out.push({ level: 'info', category: '概估', item: `${cl.name}既有資產折舊`, message: `以可折舊淨額 ${fmt(b.depreciableNbv ?? 0)}、殘值 ${fmt(b.residual ?? 0)}、剩餘耐用 ${b.remainingLife ?? '—'} 年估算` });
   }
   if (sc.a.depIncluded.some((d) => d === M.DEP_EX)) out.push({ level: 'info', category: '假設', item: '折舊拆分', message: '部分年度毛利率／費用率設定為「未含折舊」，報表毛利率將低於輸入毛利率' });
   if (sc.a.equity.oci.some((v) => (v ?? 0) !== 0) && !p.settings.ociAccount) out.push({ level: 'error', category: '假設', item: '其他綜合損益', message: '已輸入其他綜合損益但未指定對應資產負債科目，資產負債表將不平衡', page: 'settings' });

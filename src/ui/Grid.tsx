@@ -2,11 +2,26 @@ import { useState, useEffect } from 'react';
 import { Row, Cell } from '../engine/graph';
 import { useP, fmtVal } from './ctx';
 import { setPath, getPath } from './store';
+import { parseAmount } from '../engine/importer';
+
+// 貼上值轉換：百分比列「8%」或「8」→ 0.08；小於 1 之數字視為小數比率
+export function pasteValue(txt: string, format: string, options?: string[]): any {
+  const t = txt.trim();
+  if (t === '') return null;
+  if (options) return options.includes(t) ? t : undefined;
+  const pctSuffix = /[%％]$/.test(t);
+  const pa = parseAmount(t.replace(/[%％]$/, ''));
+  if (pa.value === null || pa.error) return undefined;
+  if (format === 'pct') return pctSuffix || Math.abs(pa.value) >= 1 ? pa.value / 100 : pa.value;
+  return pa.value;
+}
 
 export function NumInput({ value, pct, onCommit, className, placeholder }: { value: number | null; pct?: boolean; onCommit: (v: number | null) => void; className?: string; placeholder?: string }) {
-  const show = (v: number | null) => (v === null || v === undefined ? '' : pct ? String(+(v * 100).toFixed(6)) : String(v));
+  // 未編輯時以千分位顯示，編輯時顯示原始數字
+  const [focus, setFocus] = useState(false);
+  const show = (v: number | null, f = focus) => (v === null || v === undefined ? '' : pct ? String(+(v * 100).toFixed(6)) : f ? String(v) : v.toLocaleString('zh-TW', { maximumFractionDigits: 6 }));
   const [txt, setTxt] = useState(show(value));
-  useEffect(() => setTxt(show(value)), [value]);
+  useEffect(() => setTxt(show(value)), [value, focus]);
   const commit = () => {
     const t = txt.replace(/,/g, '').trim();
     if (t === '') { if (value !== null) onCommit(null); return; }
@@ -17,7 +32,7 @@ export function NumInput({ value, pct, onCommit, className, placeholder }: { val
   };
   return (
     <span className={`num-input ${className ?? ''}`}>
-      <input value={txt} placeholder={placeholder} onChange={(e) => setTxt(e.target.value)} onBlur={commit} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
+      <input value={txt} placeholder={placeholder} onChange={(e) => setTxt(e.target.value)} onFocus={() => { setFocus(true); setTxt(show(value, true)); }} onBlur={() => { commit(); setFocus(false); }} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
       {pct && <i>%</i>}
     </span>
   );
@@ -57,6 +72,33 @@ export function Grid({ sheet, filter, showDesc = true, title, carry = true }: { 
       });
     }, { action: '延用上一年度', detail: r.label });
   };
+  // 自 Excel 複製之多格資料（Tab 分欄、換行分列）依序填入目前及右方、下方之輸入格
+  const inputRows = rows.filter((r) => r.cells.some((c) => c?.kind === 'input'));
+  const onPaste = (e: React.ClipboardEvent, r: Row, col: number) => {
+    const text = e.clipboardData.getData('text/plain');
+    if (!/[\t\n]/.test(text.replace(/\r?\n$/, ''))) return; // 單一數值交由輸入框處理
+    e.preventDefault();
+    const matrix = text.replace(/\r/g, '').replace(/\n$/, '').split('\n').map((l) => l.split('\t'));
+    const r0 = inputRows.indexOf(r);
+    const bad: string[] = [];
+    update((np) => {
+      matrix.forEach((line, dr) => {
+        const row = inputRows[r0 + dr];
+        if (!row) return;
+        let ci = col;
+        for (const raw of line) {
+          while (ci < row.cells.length && row.cells[ci]?.kind !== 'input') ci++;
+          const cell = row.cells[ci];
+          if (!cell) break;
+          const v = pasteValue(raw, row.format, cell.options);
+          if (v === undefined) bad.push(`${row.label}［${g.columns[ci].label}］「${raw}」`);
+          else setPath(np, sc.id, cell.inputPath!, v);
+          ci++;
+        }
+      });
+    }, { action: '貼上假設', detail: `${r.label} 起 ${matrix.length} 列 × ${matrix[0].length} 欄` });
+    if (bad.length) alert(`下列儲存格格式不符，未貼上：\n${bad.slice(0, 10).join('\n')}`);
+  };
   return (
     <div className="grid-wrap">
       {title && <h3>{title}</h3>}
@@ -79,7 +121,7 @@ export function Grid({ sheet, filter, showDesc = true, title, carry = true }: { 
                 {cols.map(({ c, i }) => {
                   const cell = r.cells[i];
                   if (!cell) return <td key={c.key} />;
-                  if (cell.kind === 'input') return <td key={c.key} className="in"><InputCell row={r} cell={cell} /></td>;
+                  if (cell.kind === 'input') return <td key={c.key} className="in" onPasteCapture={(e) => onPaste(e, r, i)}><InputCell row={r} cell={cell} /></td>;
                   const inc = ev.incomplete(r.id, i);
                   const v = ev.value(r.id, i);
                   return (

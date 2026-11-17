@@ -92,6 +92,11 @@ export interface FaBase {
   enabled: boolean;
 }
 
+export interface FaAsset {
+  id: string; cls: string; name: string; acquired: string;
+  cost: Num; accDep: Num; accImp: Num; residual: Num; life: Num; remLife: Num; remLifeNote?: string;
+}
+
 export interface FaPlan {
   capex: Arr; month: Arr; life: Arr; residualPct: Arr; paid: Arr; transferIn: Arr;
   dispCost: Arr; dispAccDep: Arr; dispProceeds: Arr; dispReceived: Arr; dispDepReduce: Arr;
@@ -118,7 +123,7 @@ export interface Assumptions {
   ap: { method: SArr; param: Arr; basis: SArr };
   others: Record<string, OtherAssump>; // IS 與 BS 之 other 科目
   tax: { method: SArr; rate: Arr; adj: Arr; manual: Arr; provisionalPct: Arr; baseNol: Num };
-  equity: { capPar: Arr; capPremium: Arr; dividend: Arr; divPaidPct: Arr; oci: Arr };
+  equity: { capPar: Arr; capPremium: Arr; capCash: Arr; dividend: Arr; divPaidPct: Arr; oci: Arr };
 }
 
 export interface Scenario {
@@ -156,6 +161,7 @@ export interface Project {
   comparatives: YearData[];
   faBase: Record<string, FaBase>;
   faNature: 'gross' | 'net' | null; // 基期餘額性質確認
+  faAssets?: FaAsset[]; // 逐筆固定資產明細（進階）
   scenarios: Scenario[];
   activeScenarioId: string;
   bank: BankSettings;
@@ -192,7 +198,7 @@ export function defaultAssumptions(n: number): Assumptions {
     ap: { method: sarr(n, M.WC_DAYS), param: arr(n), basis: sarr(n, M.AP_PURCH) },
     others: {},
     tax: { method: sarr(n, M.TAX_RATE), rate: arr(n, 0.2), adj: arr(n, 0), manual: arr(n), provisionalPct: arr(n, 0.5), baseNol: 0 },
-    equity: { capPar: arr(n, 0), capPremium: arr(n, 0), dividend: arr(n, 0), divPaidPct: arr(n, 1), oci: arr(n, 0) },
+    equity: { capPar: arr(n, 0), capPremium: arr(n, 0), capCash: arr(n), dividend: arr(n, 0), divPaidPct: arr(n, 1), oci: arr(n, 0) },
   };
 }
 
@@ -259,6 +265,8 @@ export function resizeProject(p: Project, n: number) {
 export function syncScenarioWithBase(p: Project, sc: Scenario) {
   const n = p.settings.years;
   const base = p.base;
+  // 舊版專案資料補欄位
+  if (!sc.a.equity.capCash) sc.a.equity.capCash = arr(n);
   const has = (c: string) => { const v = yearAmount(base, c); return v !== null && v !== 0; };
   for (const c of ['sell_exp', 'admin_exp', 'rd_exp', 'other_opex']) if ((has(c) || p.customAccounts.some((a) => a.code === c)) && !sc.a.opex[c]) sc.a.opex[c] = arr(n);
   const others = [...DEFAULT_COA, ...p.customAccounts].filter((a) => a.role === 'other');
