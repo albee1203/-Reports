@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildLines, parseAmount, guessLayout, applyImport, newRawImport } from '../src/engine/importer';
+import { buildLines, parseAmount, guessLayout, applyImport, newRawImport, guessUnit } from '../src/engine/importer';
 import { emptyYear } from '../src/engine/project';
 
 const rows = [
@@ -11,6 +11,14 @@ const rows = [
 ];
 
 describe('importer', () => {
+  it('辨識表頭金額單位', () => {
+    expect(guessUnit([['單位：新台幣千元']])).toBe(1000);
+    expect(guessUnit([['單位：仟元']])).toBe(1000);
+    expect(guessUnit([['Unit', '單位：千美元']])).toBe(1000);
+    expect(guessUnit([['單位：百萬日圓']])).toBe(1_000_000);
+    expect(guessUnit([['單位：新台幣元']])).toBe(1);
+    expect(guessUnit([['資產負債表']])).toBeNull();
+  });
   it('parses amounts', () => {
     expect(parseAmount('(1,234)').value).toBe(-1234);
     expect(parseAmount('△500').value).toBe(-500);

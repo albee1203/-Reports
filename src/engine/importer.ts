@@ -212,8 +212,9 @@ export function detectExpenseNegative(rows: string[][], cfg: { headerRow: number
 // 由表頭文字辨識金額單位（「單位：新台幣千元」等）
 export function guessUnit(rows: string[][]): number | null {
   const text = rows.slice(0, 8).flat().join(' ');
-  if (/百萬元/.test(text)) return 1_000_000;
-  if (/千元/.test(text)) return 1000;
+  const cur = '(元|美元|日圓|日元|人民幣|港幣|港元|歐元|英鎊)';
+  if (new RegExp(`百萬${cur}`).test(text)) return 1_000_000;
+  if (new RegExp(`[千仟]${cur}`).test(text)) return 1000;
   if (/單位[：:]\s*(新台幣)?元/.test(text)) return 1;
   return null;
 }

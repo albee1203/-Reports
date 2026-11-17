@@ -12,6 +12,15 @@ export const fmtNum = (v: number, maxFrac = 6) => v.toLocaleString('zh-TW', { ma
 // 金額或比率混用之參數：絕對值 1,000 以上視為金額（括號），以下視為比率（負號）
 export const fmtParam = (v: number) => (Math.abs(v) >= 1000 ? fmtAmt(v) : fmtNum(v));
 
+// 幣別單位名稱：新台幣「新台幣元／新台幣千元」；其他幣別依中文慣例「美元／千美元」
+const CUR: Record<string, string> = { TWD: '新台幣', NTD: '新台幣', USD: '美元', CNY: '人民幣', RMB: '人民幣', JPY: '日圓', EUR: '歐元', HKD: '港幣', SGD: '新加坡幣', GBP: '英鎊' };
+export function currencyUnit(currency: string, unit: 'yuan' | 'thousand' | 'million' = 'yuan'): string {
+  const code = (currency || 'TWD').trim().toUpperCase();
+  const name = CUR[code] ?? code;
+  if (name === '新台幣') return unit === 'thousand' ? '新台幣千元' : unit === 'million' ? '新台幣百萬元' : '新台幣元';
+  return unit === 'thousand' ? `千${name}` : unit === 'million' ? `百萬${name}` : name;
+}
+
 // Excel 數字格式（正數;負數;零）
 export const XL = {
   amount: '#,##0;(#,##0);"-"',

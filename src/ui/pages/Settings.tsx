@@ -24,7 +24,7 @@ export function SettingsPage() {
         <label>幣別<input value={s.currency} onChange={(e) => set('currency', e.target.value, '幣別')} /></label>
         <label>顯示單位
           <select value={s.unit} onChange={(e) => set('unit', e.target.value, '顯示單位')}>
-            <option value="yuan">新台幣元</option><option value="thousand">新台幣千元</option>
+            <option value="yuan">{unitLabel('yuan', s.currency)}</option><option value="thousand">{unitLabel('thousand', s.currency)}</option>
           </select>
           <span className="hint">僅影響顯示及輸出版面；底層以元計算，保留精度。</span>
         </label>

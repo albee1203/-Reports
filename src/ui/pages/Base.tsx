@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useP, fmtVal } from '../ctx';
+import { useP, fmtVal, unitLabel } from '../ctx';
 import { NumInput } from '../Grid';
 import { allAccounts, SECTION_NAMES, Section, AccountDef, CfClass } from '../../engine/coa';
 import { readFile, SheetData, guessLayout, guessUnit, buildLines, newRawImport, applyImport, remapLine, reconcileSubtotals, MapConfig, parseAmount } from '../../engine/importer';
@@ -376,7 +376,7 @@ function CfImport() {
   );
 }
 
-const MOVE_LABEL: Record<Move, string> = { open: '期初餘額', inc: '現金增資', ni: '本期淨利', oci: '其他綜合損益', div: '現金股利', approp: '盈餘公積提列（保留盈餘內部移轉）', oth: '其他變動', close: '期末餘額（核對用）', skip: '小計（略過）' };
+const MOVE_LABEL: Record<Move, string> = { open: '期初餘額', inc: '現金增資', red: '減資（現金減資、彌補虧損）', trf: '轉增資（盈餘、資本公積）', ni: '本期淨利', oci: '其他綜合損益', div: '現金股利', approp: '盈餘公積提列（保留盈餘內部移轉）', oth: '其他變動', close: '期末餘額（核對用）', skip: '小計（略過）' };
 
 function SceImport() {
   const { g, ev, info, p, update } = useP();
@@ -403,7 +403,7 @@ function SceImport() {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('權益變動表');
     ws.getCell('A1').value = `${p.settings.companyName}　權益變動表`;
-    ws.getCell('A2').value = `${p.settings.baseYear} 年度　單位：新台幣元（減項請以負數或括號表示）`;
+    ws.getCell('A2').value = `${p.settings.baseYear} 年度　單位：${unitLabel('yuan', p.settings.currency)}（減項請以負數或括號表示）`;
     ws.getRow(4).values = ['項目', ...TEMPLATE_COLS.map((c) => c[0])];
     ws.getRow(4).font = { bold: true };
     TEMPLATE_ROWS.forEach(([label], i) => {

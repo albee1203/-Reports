@@ -167,6 +167,10 @@ export function buildGraph(p: Project, sc: Scenario): { g: Graph; info: ModelInf
   irow(SH.assump, 'a:cap_par', '現金增資－股本（面額）', 'amount', A.equity.capPar, 'a.equity.capPar', { required: true });
   irow(SH.assump, 'a:cap_prem', '現金增資－溢價（資本公積）', 'amount', A.equity.capPremium, 'a.equity.capPremium', { required: true });
   irow(SH.assump, 'a:cap_cash', '增資款當年度收現（空白＝同認列額）', 'amount', A.equity.capCash, 'a.equity.capCash', { desc: '收現早於認列列為預收股本；晚於認列列為應收股款' });
+  irow(SH.assump, 'a:cap_red_cash', '現金減資（退還股款）', 'amount', A.equity.capRedCash, 'a.equity.capRedCash', { required: true, desc: '股本減少，當年度退還股款（籌資活動流出）' });
+  irow(SH.assump, 'a:cap_red_loss', '減資彌補虧損', 'amount', A.equity.capRedLoss, 'a.equity.capRedLoss', { required: true, desc: '股本減少、保留盈餘增加，不影響現金' });
+  irow(SH.assump, 'a:stock_div', '盈餘轉增資（股票股利）', 'amount', A.equity.stockDiv, 'a.equity.stockDiv', { required: true, desc: '保留盈餘轉為股本，不影響現金' });
+  irow(SH.assump, 'a:cs_to_cap', '資本公積轉增資', 'amount', A.equity.csToCap, 'a.equity.csToCap', { required: true, desc: '資本公積轉為股本，不影響現金' });
   irow(SH.assump, 'a:div', '宣告現金股利', 'amount', A.equity.dividend, 'a.equity.dividend', { required: true });
   irow(SH.assump, 'a:div_pct', '現金股利當年度支付比例', 'pct', A.equity.divPaidPct, 'a.equity.divPaidPct', { required: true });
   irow(SH.assump, 'a:oci', '其他綜合損益（稅後）', 'amount', A.equity.oci, 'a.equity.oci', { required: true, desc: st.ociAccount ? `對應科目：${accts.find((a) => a.code === st.ociAccount)?.name}` : '未指定對應科目（非零時資產負債表將不平衡）' });
@@ -412,12 +416,12 @@ export function buildGraph(p: Project, sc: Scenario): { g: Graph; info: ModelInf
   frow(SH.taxeq, 't:net', '應付所得稅淨額（負數為預付）', 'amount', (c) => sub(r('t:tax', c), r('t:prov', c)), { base: (c) => sub(AC('tax_pay', c), AC('tax_asset', c)) });
   frow(SH.taxeq, 't:paid', '實際付稅', 'amount', (c) => add(prev('t:net', c), r('t:prov', c)), { desc: '期初應付所得稅（結算申報）＋當年度暫繳' });
   // ===== 權益 =====
-  frow(SH.taxeq, 'e:capital', '股本', 'amount', (c) => add(prev('e:capital', c), r('a:cap_par', c)), { base: (c) => AC('capital', c) });
-  frow(SH.taxeq, 'e:cs', '資本公積', 'amount', (c) => add(prev('e:cs', c), r('a:cap_prem', c)), { base: (c) => AC('cap_surplus', c) });
+  frow(SH.taxeq, 'e:capital', '股本', 'amount', (c) => add(sub(sub(add(prev('e:capital', c), r('a:cap_par', c)), r('a:cap_red_cash', c)), r('a:cap_red_loss', c)), r('a:stock_div', c), r('a:cs_to_cap', c)), { base: (c) => AC('capital', c), desc: '期初＋現金增資−現金減資−減資彌補虧損＋盈餘轉增資＋資本公積轉增資' });
+  frow(SH.taxeq, 'e:cs', '資本公積', 'amount', (c) => sub(add(prev('e:cs', c), r('a:cap_prem', c)), r('a:cs_to_cap', c)), { base: (c) => AC('cap_surplus', c) });
   frow(SH.taxeq, 'e:cap_rec', '增資認列額（股本＋溢價）', 'amount', (c) => add(r('a:cap_par', c), r('a:cap_prem', c)));
   frow(SH.taxeq, 'e:cap_cash', '增資實際收現', 'amount', (c) => iff(fn('ISBLANK', r('a:cap_cash', c)), r('e:cap_rec', c), r('a:cap_cash', c)));
   frow(SH.taxeq, 'e:cap_adv', '預收股本（負數為應收股款）', 'amount', (c) => add(prev('e:cap_adv', c), sub(r('e:cap_cash', c), r('e:cap_rec', c))), { base: (c) => AC('cap_adv', c) });
-  frow(SH.taxeq, 'e:re', '保留盈餘', 'amount', (c) => sub(add(prev('e:re', c), r('is:ni', c)), r('a:div', c)), { base: (c) => AC('re', c) });
+  frow(SH.taxeq, 'e:re', '保留盈餘', 'amount', (c) => sub(add(sub(add(prev('e:re', c), r('is:ni', c)), r('a:div', c)), r('a:cap_red_loss', c)), r('a:stock_div', c)), { base: (c) => AC('re', c), desc: '期初＋本期淨利−現金股利＋減資彌補虧損−盈餘轉增資' });
   frow(SH.taxeq, 'e:oe', '其他權益', 'amount', (c) => add(prev('e:oe', c), r('a:oci', c)), { base: (c) => AC('other_eq', c) });
   frow(SH.taxeq, 'e:div_paid', '現金股利支付', 'amount', (c) => add(prev('e:div_pay', c), mul(r('a:div', c), r('a:div_pct', c))));
   frow(SH.taxeq, 'e:div_pay', '應付股利', 'amount', (c) => sub(add(prev('e:div_pay', c), r('a:div', c)), r('e:div_paid', c)), { base: (c) => AC('div_pay', c) });
@@ -478,8 +482,9 @@ export function buildGraph(p: Project, sc: Scenario): { g: Graph; info: ModelInf
   const finLines = ['cf:draw', 'cf:repay'];
   if (!intOp) { cfRow('cf:intpaid', '支付之利息', (c) => neg(r('l:ipaid', c)), { indent: 1 }); finLines.push('cf:intpaid'); }
   cfRow('cf:capinc', '現金增資', (c) => r('e:cap_cash', c), { indent: 1 });
+  cfRow('cf:capred', '現金減資退還股款', (c) => neg(r('a:cap_red_cash', c)), { indent: 1 });
   cfRow('cf:divpaid', '發放現金股利', (c) => neg(r('e:div_paid', c)), { indent: 1 });
-  finLines.push('cf:capinc', 'cf:divpaid');
+  finLines.push('cf:capinc', 'cf:capred', 'cf:divpaid');
   for (const a of otherBS.filter((a) => clsOf(a) === 'financing')) {
     const id = `cf:o:${a.code}`;
     cfRow(id, `${a.name}${isDebit(a) ? '（增加）減少' : '增加（減少）'}`, (c) => otherChange(a, c), { indent: 1 });
@@ -563,12 +568,18 @@ export function buildGraph(p: Project, sc: Scenario): { g: Graph; info: ModelInf
     sceRow(`sce:${key}_close`, '期末餘額', (c) => add(r(`sce:${key}_open`, c), ...moves.map((m) => r(m.id, c))), { baseF: (c) => closeBase(c), style: 'subtotal' });
     void closeSrc;
   };
-  comp('cap', '股本', 'e:capital', (c) => AC('capital', c), [{ id: 'sce:cap_inc', label: '現金增資', f: (c) => r('a:cap_par', c) }]);
-  comp('cs', '資本公積', 'e:cs', (c) => AC('cap_surplus', c), [{ id: 'sce:cs_inc', label: '現金增資溢價', f: (c) => r('a:cap_prem', c) }]);
+  comp('cap', '股本', 'e:capital', (c) => AC('capital', c), [
+    { id: 'sce:cap_inc', label: '現金增資', f: (c) => r('a:cap_par', c) },
+    { id: 'sce:cap_red', label: '減資', f: (c) => neg(add(r('a:cap_red_cash', c), r('a:cap_red_loss', c))) },
+    { id: 'sce:cap_tr', label: '盈餘及資本公積轉增資', f: (c) => add(r('a:stock_div', c), r('a:cs_to_cap', c)) },
+  ]);
+  comp('cs', '資本公積', 'e:cs', (c) => AC('cap_surplus', c), [{ id: 'sce:cs_inc', label: '現金增資溢價', f: (c) => r('a:cap_prem', c) }, { id: 'sce:cs_tr', label: '資本公積轉增資', f: (c) => neg(r('a:cs_to_cap', c)) }]);
   comp('adv', '預收股本（應收股款）', 'e:cap_adv', (c) => AC('cap_adv', c), [{ id: 'sce:adv_chg', label: '增資收現與認列差額', f: (c) => sub(r('e:cap_cash', c), r('e:cap_rec', c)) }]);
   comp('re', '保留盈餘', 'e:re', (c) => AC('re', c), [
     { id: 'sce:re_ni', label: '本期淨利（淨損）', f: (c) => r('is:ni', c) },
     { id: 'sce:re_div', label: '現金股利', f: (c) => neg(r('a:div', c)) },
+    { id: 'sce:re_red', label: '減資彌補虧損', f: (c) => r('a:cap_red_loss', c) },
+    { id: 'sce:re_sd', label: '盈餘轉增資', f: (c) => neg(r('a:stock_div', c)) },
   ]);
   comp('oe', '其他權益', 'e:oe', (c) => AC('other_eq', c), [{ id: 'sce:oe_oci', label: '本期其他綜合損益', f: (c) => r('is:oci', c) }]);
   if (otherEqAccts.length) comp('ot', '其他權益項目（庫藏股等）', '', (c) => oeItems(c, true), [{ id: 'sce:ot_chg', label: '本期變動', f: (c) => sub(oeItems(c, false), oeItems(c - 1, c - 1 === cb)) }]);
@@ -576,7 +587,7 @@ export function buildGraph(p: Project, sc: Scenario): { g: Graph; info: ModelInf
   const keys = ['cap', 'cs', 'adv', 're', 'oe', ...(otherEqAccts.length ? ['ot'] : [])];
   sceRow('sce:t_open', '期初權益', (c) => add(...keys.map((k) => r(`sce:${k}_open`, c))), { indent: 1 });
   sceRow('sce:t_ci', '本期綜合損益總額', (c) => add(r('sce:re_ni', c), r('sce:oe_oci', c)), { indent: 1 });
-  sceRow('sce:t_owner', '與業主之交易（增資、股利）', (c) => add(r('sce:cap_inc', c), r('sce:cs_inc', c), r('sce:adv_chg', c), r('sce:re_div', c)), { indent: 1 });
+  sceRow('sce:t_owner', '與業主之交易（增減資、股利、轉增資）', (c) => add(r('sce:cap_inc', c), r('sce:cap_red', c), r('sce:cap_tr', c), r('sce:cs_inc', c), r('sce:cs_tr', c), r('sce:adv_chg', c), r('sce:re_div', c), r('sce:re_red', c), r('sce:re_sd', c)), { indent: 1 });
   if (otherEqAccts.length) sceRow('sce:t_other', '其他權益項目變動', (c) => r('sce:ot_chg', c), { indent: 1 });
   sceRow('sce:t_oth', '其他變動', (c) => add(...keys.map((k) => r(`sce:${k}_oth`, c))), { indent: 1 });
   sceRow('sce:t_close', '期末權益', (c) => add(...keys.map((k) => r(`sce:${k}_close`, c))), { baseF: (c) => add(...keys.map((k) => r(`sce:${k}_close`, c))), style: 'total' });

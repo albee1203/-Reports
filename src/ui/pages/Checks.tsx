@@ -45,7 +45,7 @@ export function ChecksPage() {
     <div>
       <h1>勾稽與現金警示</h1>
       <section className="card">
-        <h2>年末現金警示（門檻 {fmtVal(p.settings.cashThreshold, 'amount', u)}，{unitLabel(u)}）</h2>
+        <h2>年末現金警示（門檻 {fmtVal(p.settings.cashThreshold, 'amount', u)}，{unitLabel(u, p.settings.currency)}）</h2>
         {alerts.length === 0 ? <p className="ok">✓ 各預估年度年末現金均不低於門檻。</p> : (
           <table className="grid">
             <thead><tr><th>年度</th><th>預估年末現金</th><th>低於門檻差額</th><th>資金缺口（現金為負）</th></tr></thead>
@@ -88,7 +88,7 @@ export function ComparePage() {
   const years = data[0].years;
   return (
     <div>
-      <h1>情境比較（{unitLabel(u)}）</h1>
+      <h1>情境比較（{unitLabel(u, p.settings.currency)}）</h1>
       <ScenPick sel={sel} setSel={setSel} />
       <section className="card">
         <Legend names={data.map((d) => d.sc.name)} />

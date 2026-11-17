@@ -125,7 +125,7 @@ export function collectIssues(p: Project, sc: Scenario, g: Graph, ev: EvalResult
     if (!g.byId.has(id)) return;
     for (const c of info.fcols) { const v = ev.num(id, c); if (v < -0.5) out.push({ level: 'warning', category: '異常餘額', year: yr(c), item: label, message: `預估餘額為負數 ${fmt(v)}`, rowId: id }); }
   };
-  neg('w:ar', '應收帳款'); neg('w:inv', '存貨'); neg('w:ap', '應付帳款'); neg('l:short', '短期借款'); neg('l:long_total', '長期借款'); neg('e:div_pay', '應付股利'); neg('f:equip_pay', '應付設備款');
+  neg('w:ar', '應收帳款'); neg('e:capital', '股本'); neg('e:cs', '資本公積'); neg('w:inv', '存貨'); neg('w:ap', '應付帳款'); neg('l:short', '短期借款'); neg('l:long_total', '長期借款'); neg('e:div_pay', '應付股利'); neg('f:equip_pay', '應付設備款');
   for (const cl of info.faClasses) neg(`f:${cl.key}:nbv`, `${cl.name}帳面淨額`);
   for (const a of info.otherBS) if (!a.canBeNegative) neg(`o:${a.code}`, a.name);
   for (const c of info.fcols) if (ev.num('t:net', c) < -0.5) out.push({ level: 'info', category: '異常餘額', year: yr(c), item: '所得稅', message: `暫繳超過當年度稅額，預付 ${fmt(-ev.num('t:net', c))} 列為本期所得稅資產` });
@@ -188,7 +188,7 @@ export function inputSanity(g: Graph): Issue[] {
     { test: (id) => /^l:.*:rate$/.test(id), check: (v) => (v >= 0 && v <= 0.2 ? null : '利率為負數或超過 20%，請確認') },
     { test: (id) => g.byId.get(id)?.format === 'years', check: (v) => (v > 0 && v <= 60 ? null : '年限須大於 0（通常不超過 60 年）') },
     { test: (id) => ['a:ar_p', 'a:inv_p', 'a:ap_p'].includes(id), check: (v) => (v >= 0 && v <= 730 ? null : '週轉參數為負數或過大，請確認') },
-    { test: (id) => /^(f|d):.*:(capex|paid|dcost|dacc|dproc|drecv|imp|cost|acc|resid)$/.test(id) || /^l:.*:(draw|repay)$/.test(id) || ['a:div', 'a:cap_par', 'a:cap_prem'].includes(id), check: (v) => (v >= 0 ? null : '金額不應為負數') },
+    { test: (id) => /^(f|d):.*:(capex|paid|dcost|dacc|dproc|drecv|imp|cost|acc|resid)$/.test(id) || /^l:.*:(draw|repay)$/.test(id) || ['a:div', 'a:cap_par', 'a:cap_prem', 'a:cap_red_cash', 'a:cap_red_loss', 'a:stock_div', 'a:cs_to_cap'].includes(id), check: (v) => (v >= 0 ? null : '金額不應為負數（減少請使用減資欄位）') },
   ];
   // 其他科目：方法為成長率或比率，參數卻像金額
   for (const row of g.rows) {

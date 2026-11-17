@@ -1,4 +1,4 @@
-import { fmtAmt } from '../engine/format';
+import { fmtAmt, currencyUnit } from '../engine/format';
 import { createContext, useContext } from 'react';
 import { Graph, EvalResult, Row, RowFormat, Value, exprToText, refsOf } from '../engine/graph';
 import { ModelInfo } from '../engine/model';
@@ -42,7 +42,7 @@ export function fmtVal(v: Value, format: RowFormat, unit: 'yuan' | 'thousand'): 
   }
 }
 
-export const unitLabel = (u: 'yuan' | 'thousand') => (u === 'thousand' ? '新台幣千元' : '新台幣元');
+export const unitLabel = (u: 'yuan' | 'thousand', currency = 'TWD') => currencyUnit(currency, u);
 
 export interface TraceInfo {
   row: Row; col: number; kindLabel: string; text: string; value: Value;

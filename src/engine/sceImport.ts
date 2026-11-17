@@ -3,7 +3,7 @@ import { parseAmount } from './importer';
 import { fmtAmt } from './format';
 
 export type Comp = 'cap' | 'cs' | 'adv' | 're' | 'oe' | 'ot' | 'total';
-export type Move = 'open' | 'inc' | 'ni' | 'oci' | 'div' | 'approp' | 'oth' | 'close' | 'skip';
+export type Move = 'open' | 'inc' | 'red' | 'trf' | 'ni' | 'oci' | 'div' | 'approp' | 'oth' | 'close' | 'skip';
 
 export const COMP_LABEL: Record<Comp, string> = { cap: '股本', cs: '資本公積', adv: '預收股本', re: '保留盈餘', oe: '其他權益', ot: '庫藏股票', total: '權益總額' };
 
@@ -23,6 +23,8 @@ const ROW_RULES: [RegExp, Move][] = [
   [/期末|年底|年末|本年度?餘額/, 'close'],
   [/綜合損益總額/, 'skip'],
   [/提列.*(法定|特別)盈餘公積|(法定|特別)盈餘公積.*提列|迴轉特別盈餘公積|盈餘指撥/, 'approp'],
+  [/盈餘轉增資|股票股利|資本公積轉增資|轉增資/, 'trf'],
+  [/減資/, 'red'],
   [/現金股利|股利/, 'div'],
   [/本期淨利|本期淨損|本期損益|本年度淨利|本年度損益|本期淨（損）利|本期淨利（損）/, 'ni'],
   [/其他綜合損益/, 'oci'],
@@ -43,6 +45,8 @@ export function targetId(m: Move, c: Comp): string | null {
     ni: { re: 'sce:re_ni' },
     oci: { oe: 'sce:oe_oci' },
     div: { re: 'sce:re_div' },
+    red: { cap: 'sce:cap_red', re: 'sce:re_red' },
+    trf: { cap: 'sce:cap_tr', cs: 'sce:cs_tr', re: 'sce:re_sd' },
   };
   return map[m]?.[c] ?? (c === 'ot' ? 'sce:ot_chg' : `sce:${c}_oth`);
 }
@@ -104,7 +108,7 @@ export function sceTotals(v: Record<string, number>, keys: string[]): Record<str
   return {
     'sce:t_open': keys.reduce((t, k) => t + g(`sce:${k}_open`), 0),
     'sce:t_ci': g('sce:re_ni') + g('sce:oe_oci'),
-    'sce:t_owner': g('sce:cap_inc') + g('sce:cs_inc') + g('sce:adv_chg') + g('sce:re_div'),
+    'sce:t_owner': ['sce:cap_inc', 'sce:cap_red', 'sce:cap_tr', 'sce:cs_inc', 'sce:cs_tr', 'sce:adv_chg', 'sce:re_div', 'sce:re_red', 'sce:re_sd'].reduce((t, id) => t + g(id), 0),
     ...(keys.includes('ot') ? { 'sce:t_other': g('sce:ot_chg') } : {}),
     'sce:t_oth': keys.reduce((t, k) => t + g(`sce:${k}_oth`), 0),
   };
@@ -120,6 +124,10 @@ export const TEMPLATE_ROWS: [string, Move][] = [
   ['本期其他綜合損益', 'oci'],
   ['本期綜合損益總額', 'skip'],
   ['現金增資', 'inc'],
+  ['現金減資', 'red'],
+  ['減資彌補虧損', 'red'],
+  ['盈餘轉增資', 'trf'],
+  ['資本公積轉增資', 'trf'],
   ['其他', 'oth'],
   ['期末餘額', 'close'],
 ];

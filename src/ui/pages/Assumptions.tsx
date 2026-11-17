@@ -57,7 +57,7 @@ export function AssumptionsPage() {
       <Grid sheet={SH.oth} title="其他資產負債科目計算結果" carry={false} />
       <Grid sheet={SH.assump} title="所得稅（簡化當期估算，不含遞延所得稅）" filter={pre('a:tax', 'a:nol0')} />
       <Grid sheet={SH.taxeq} title="所得稅計算" carry={false} filter={pre('t:')} />
-      <Grid sheet={SH.assump} title="權益" filter={pre('a:cap', 'a:div', 'a:oci')} />
+      <Grid sheet={SH.assump} title="權益" filter={pre('a:cap', 'a:stock', 'a:cs_to', 'a:div', 'a:oci')} />
       <Grid sheet={SH.taxeq} title="權益計算" carry={false} filter={pre('e:')} />
       <Grid sheet={SH.assump} title="專案參數" carry={false} filter={pre('p:')} />
     </div>

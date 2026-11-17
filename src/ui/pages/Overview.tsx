@@ -36,7 +36,7 @@ export function OverviewPage() {
       <div className="kpis">
         {kpi.map(([k, v]) => <div key={k} className="kpi"><div className="k">{k}</div><div className={`v ${v < 0 ? 'neg' : ''}`}>{fmtVal(v, 'amount', u)}</div></div>)}
       </div>
-      <p className="muted small">單位：{unitLabel(u)}。{alerts.length ? `⚠ ${alerts.length} 個預估年度年末現金低於門檻 ${fmtVal(p.settings.cashThreshold, 'amount', u)}${alerts.some((a) => a.gap > 0) ? '，且有資金缺口' : ''}。` : '各預估年度年末現金均不低於門檻。'}</p>
+      <p className="muted small">單位：{unitLabel(u, p.settings.currency)}。{alerts.length ? `⚠ ${alerts.length} 個預估年度年末現金低於門檻 ${fmtVal(p.settings.cashThreshold, 'amount', u)}${alerts.some((a) => a.gap > 0) ? '，且有資金缺口' : ''}。` : '各預估年度年末現金均不低於門檻。'}</p>
       <section className="card">
         <h2>編製步驟</h2>
         <table className="grid steps">

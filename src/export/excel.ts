@@ -4,7 +4,7 @@ import { Graph, EvalResult, exprToExcel, colLetter, exprToText, Row } from '../e
 import { SH, STATEMENT_SHEETS, isZeroRow } from '../engine/model';
 import { Project, Scenario, defaultPeriodText } from '../engine/project';
 import { reportStatus, Issue } from '../engine/checks';
-import { XL } from '../engine/format';
+import { XL, currencyUnit } from '../engine/format';
 
 export type ExportMode = 'internal' | 'bank';
 
@@ -51,7 +51,7 @@ export async function buildWorkbook(o: ExportOptions): Promise<ExcelJS.Workbook>
   wb.created = new Date();
   wb.calcProperties = { ...(wb.calcProperties ?? {}), fullCalcOnLoad: true }; // 開啟時重算
   const status = reportStatus(o.issues, mode);
-  const unitText = st.unit === 'thousand' ? '新台幣千元' : '新台幣元';
+  const unitText = currencyUnit(st.currency, st.unit);
   const amtFmt = amountFormat(st.unit);
 
   // 列位置
@@ -175,7 +175,7 @@ export async function buildWorkbook(o: ExportOptions): Promise<ExcelJS.Workbook>
       const sig = ws.getRow(last + 3);
       sig.getCell(1).value = '負責人：＿＿＿＿＿＿＿＿';
       sig.getCell(FIRST_DATA_COL + Math.max(0, g.columns.length - 3)).value = '財務主管：＿＿＿＿＿＿＿＿';
-      ws.getRow(last + 1).getCell(1).value = `註：「預估」欄位為依假設推估之預估數，非實際數。${st.unit === 'thousand' ? '金額以新台幣千元表達，因四捨五入，合計數與明細加總可能有尾差。' : ''}`;
+      ws.getRow(last + 1).getCell(1).value = `註：「預估」欄位為依假設推估之預估數，非實際數。${st.unit === 'thousand' ? '金額以${unitText}表達，因四捨五入，合計數與明細加總可能有尾差。' : ''}`;
       ws.getRow(last + 1).getCell(1).font = { italic: true, size: 9 };
     }
     if (name === SH.ck) {

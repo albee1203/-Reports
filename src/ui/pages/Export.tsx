@@ -29,7 +29,7 @@ export function ExportPage() {
       <section className="card">
         <h2>Excel（.xlsx，預設）</h2>
         <p>作為後續手動調整的主檔。活頁簿包含：封面及說明、假設及計算依據、基期資料、原始匯入資料、各計算明細、四大報表、勾稽檢查{'；'}銀行版另含附註。每個預估年度保留可在 Excel 重算之公式，修改「假設及計算依據」等輸入儲存格後，報表及勾稽一併更新。</p>
-        <p className="muted small">情境：{sc.name}　單位：{unitLabel(p.settings.unit)}（千元以儲存格格式顯示，底層仍為元）　內部版狀態：{reportStatus(issues, 'internal')}　銀行版狀態：{reportStatus(bankIssues, 'bank')}</p>
+        <p className="muted small">情境：{sc.name}　單位：{unitLabel(p.settings.unit, p.settings.currency)}（千元以儲存格格式顯示，底層仍為元）　內部版狀態：{reportStatus(issues, 'internal')}　銀行版狀態：{reportStatus(bankIssues, 'bank')}</p>
         <div className="row">
           <button className="primary" disabled={!!busy} onClick={() => doExcel('internal')}>{busy === 'internal' ? '產生中…' : '匯出內部預估版 Excel'}</button>
           <button className="primary" disabled={!!busy} onClick={() => doExcel('bank')}>{busy === 'bank' ? '產生中…' : '匯出銀行送件版 Excel'}</button>
@@ -150,7 +150,7 @@ function VersionCompare({ v }: { v: Version }) {
   return (
     <>
       <section className="card">
-        <h2>版本比較：「{v.label}」與目前（情境：{sc.name}，{unitLabel(u)}）</h2>
+        <h2>版本比較：「{v.label}」與目前（情境：{sc.name}，{unitLabel(u, p.settings.currency)}）</h2>
         <table className="grid stmt">
           <thead><tr><th>指標</th><th /> {years.map((y) => <th key={y} className="forecast">{y}</th>)}</tr></thead>
           <tbody>

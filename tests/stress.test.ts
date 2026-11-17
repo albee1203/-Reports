@@ -40,6 +40,8 @@ export function randomProject(seed: number) {
   fill(a.equity.capCash, () => (R() < 0.3 ? between(0, 4e7) : null));
   fill(a.equity.dividend, () => (R() < 0.5 ? between(0, 2e7) : 0)); fill(a.equity.divPaidPct, () => R());
   fill(a.equity.oci, () => (R() < 0.3 ? between(-3e6, 3e6) : 0));
+  fill(a.equity.capRedCash, () => (R() < 0.15 ? between(0, 5e6) : 0)); fill(a.equity.capRedLoss, () => (R() < 0.15 ? between(0, 5e6) : 0));
+  fill(a.equity.stockDiv, () => (R() < 0.2 ? between(0, 5e6) : 0)); fill(a.equity.csToCap, () => (R() < 0.15 ? between(0, 2e6) : 0));
   p.settings.ociAccount = Object.keys(a.others).find((c) => ['lt_invest', 'other_nca', 'intangible'].includes(c)) ?? null;
   if (!p.settings.ociAccount) fill(a.equity.oci, () => 0);
   p.settings.interestPaidClass = pick(['operating', 'financing'] as const);

@@ -24,3 +24,14 @@ describe('金額負數以括號、其他數字以負號表示', () => {
     expect(parseAmount('（3.5）').value).toBe(-3.5);
   });
 });
+
+import { currencyUnit } from '../src/engine/format';
+describe('幣別單位', () => {
+  it('新台幣與其他幣別', () => {
+    expect(currencyUnit('TWD', 'yuan')).toBe('新台幣元');
+    expect(currencyUnit('TWD', 'thousand')).toBe('新台幣千元');
+    expect(currencyUnit('usd', 'thousand')).toBe('千美元');
+    expect(currencyUnit('JPY', 'yuan')).toBe('日圓');
+    expect(currencyUnit('XYZ', 'thousand')).toBe('千XYZ');
+  });
+});

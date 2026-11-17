@@ -123,7 +123,7 @@ export interface Assumptions {
   ap: { method: SArr; param: Arr; basis: SArr };
   others: Record<string, OtherAssump>; // IS 與 BS 之 other 科目
   tax: { method: SArr; rate: Arr; adj: Arr; manual: Arr; provisionalPct: Arr; baseNol: Num };
-  equity: { capPar: Arr; capPremium: Arr; capCash: Arr; dividend: Arr; divPaidPct: Arr; oci: Arr };
+  equity: { capPar: Arr; capPremium: Arr; capCash: Arr; dividend: Arr; divPaidPct: Arr; oci: Arr; capRedCash: Arr; capRedLoss: Arr; stockDiv: Arr; csToCap: Arr };
 }
 
 export interface Scenario {
@@ -200,7 +200,7 @@ export function defaultAssumptions(n: number): Assumptions {
     ap: { method: sarr(n, M.WC_DAYS), param: arr(n), basis: sarr(n, M.AP_PURCH) },
     others: {},
     tax: { method: sarr(n, M.TAX_RATE), rate: arr(n, 0.2), adj: arr(n, 0), manual: arr(n), provisionalPct: arr(n, 0.5), baseNol: 0 },
-    equity: { capPar: arr(n, 0), capPremium: arr(n, 0), capCash: arr(n), dividend: arr(n, 0), divPaidPct: arr(n, 1), oci: arr(n, 0) },
+    equity: { capPar: arr(n, 0), capPremium: arr(n, 0), capCash: arr(n), dividend: arr(n, 0), divPaidPct: arr(n, 1), oci: arr(n, 0), capRedCash: arr(n, 0), capRedLoss: arr(n, 0), stockDiv: arr(n, 0), csToCap: arr(n, 0) },
   };
 }
 

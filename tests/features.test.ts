@@ -98,3 +98,29 @@ describe('參數像金額', () => {
     expect(xs.some((x) => x.level === 'error' && x.message.includes('看似金額') && x.year === 2026)).toBe(true);
   });
 });
+
+describe('減資與轉增資', () => {
+  it('四種權益交易之股本、資本公積、保留盈餘與現金影響', () => {
+    const p = sampleProject();
+    const sc = p.scenarios[0];
+    const e = sc.a.equity;
+    e.capRedCash[0] = 5_000_000; e.capRedLoss[1] = 3_000_000; e.stockDiv[2] = 6_000_000; e.csToCap[3] = 2_000_000;
+    const { g, info } = buildGraph(p, sc);
+    const ev = evaluate(g);
+    const [c1, c2, c3, c4] = info.fcols;
+    expect(ev.num('e:capital', c1)).toBe(55_000_000);
+    expect(ev.num('cf:capred', c1)).toBe(-5_000_000);
+    expect(ev.num('e:capital', c2)).toBe(52_000_000);
+    expect(ev.num('sce:re_red', c2)).toBe(3_000_000);
+    expect(ev.num('e:capital', c3)).toBe(58_000_000);
+    expect(ev.num('sce:re_sd', c3)).toBe(-6_000_000);
+    expect(ev.num('e:capital', c4)).toBe(60_000_000);
+    expect(ev.num('e:cs', c4)).toBe(3_000_000);
+    for (const c of info.fcols) for (const id of ['ck:bs', 'ck:cash', 'ck:eq', 'ck:ni']) expect(Math.abs(ev.num(id, c))).toBeLessThan(0.5);
+    // 權益變動表：期初＋各項變動＝期末
+    for (const c of info.fcols) {
+      const parts = ['sce:t_open', 'sce:t_ci', 'sce:t_owner', 'sce:t_oth'].reduce((t, id) => t + ev.num(id, c), 0);
+      expect(parts).toBeCloseTo(ev.num('sce:t_close', c), 2);
+    }
+  });
+});

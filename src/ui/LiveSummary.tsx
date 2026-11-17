@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import { useP, fmtVal } from './ctx';
-import { paren } from '../engine/format';
+import { paren, currencyUnit } from '../engine/format';
 
 // 百萬元，一位小數；負數以括號表示
 const mn = (v: number) => (Math.abs(v) < 50_000 ? '-' : paren(v, (a) => (a / 1e6).toLocaleString('zh-TW', { minimumFractionDigits: 1, maximumFractionDigits: 1 })));
@@ -31,7 +31,7 @@ export function LiveSummary({ onClose }: { onClose: () => void }) {
   const out = (
     <aside className="live">
       <div className="trace-head"><b>即時摘要</b><button className="mini" onClick={onClose} title="隱藏（可於頁面上方再次開啟）">✕</button></div>
-      <p className="muted small">金額單位：新台幣百萬元（精簡顯示，完整數字見報表）；點選數字可追溯公式。</p>
+      <p className="muted small">金額單位：{currencyUnit(p.settings.currency, 'million')}（精簡顯示，完整數字見報表）；點選數字可追溯公式。</p>
       <table className="grid small live-t">
         <thead><tr><th className="lbl">項目</th>{cols.map((c) => <th key={c} className="forecast">{g.columns[c].label}</th>)}</tr></thead>
         <tbody>

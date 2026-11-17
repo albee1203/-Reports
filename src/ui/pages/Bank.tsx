@@ -28,7 +28,7 @@ export function BankPage() {
           <label>報表標題<input value={b.titles[tab] ?? tab} onChange={(e) => update((np) => { np.bank.titles[tab] = e.target.value; })} /></label>
           <label>報導期間<input className="wide" value={b.periodText[tab] ?? defaultPeriod(p, tab)} onChange={(e) => update((np) => { np.bank.periodText[tab] = e.target.value; })} /></label>
           <label>公司名稱（全部報表）<input value={p.settings.companyName} onChange={(e) => update((np) => { np.settings.companyName = e.target.value; })} /></label>
-          <label>金額單位<select value={p.settings.unit} onChange={(e) => update((np) => { np.settings.unit = e.target.value as any; })}><option value="yuan">新台幣元</option><option value="thousand">新台幣千元</option></select></label>
+          <label>金額單位<select value={p.settings.unit} onChange={(e) => update((np) => { np.settings.unit = e.target.value as any; })}><option value="yuan">{unitLabel('yuan', p.settings.currency)}</option><option value="thousand">{unitLabel('thousand', p.settings.currency)}</option></select></label>
         </div>
         <p className="hint">直接修改下表科目名稱即可；科目分類請於「基期資料」調整對應或新增自訂科目。</p>
         <StatementTable sheet={tab} labels={b.labels} onLabel={(id, v) => update((np) => { np.bank.labels[id] = v; })} />
@@ -130,7 +130,7 @@ export function PrintView({ onClose }: { onClose: () => void }) {
                 <div className="co">{p.settings.companyName}</div>
                 <div className="ti">{b.titles[sheet] || sheet}</div>
                 <div className="pe">{b.periodText[sheet] || defaultPeriod(p, sheet)}</div>
-                <div className="un">單位：{unitLabel(u)}</div>
+                <div className="un">單位：{unitLabel(u, p.settings.currency)}</div>
               </div>
               <table className="pt">
                 <thead>
@@ -150,7 +150,7 @@ export function PrintView({ onClose }: { onClose: () => void }) {
                   ))}
                 </tbody>
               </table>
-              <p className="pn">註：標示「預估」之欄位係依假設編製之財務預估數，非實際數。{u === 'thousand' && '金額以新台幣千元表達，因四捨五入，合計數與明細加總可能有尾差。'}</p>
+              <p className="pn">註：標示「預估」之欄位係依假設編製之財務預估數，非實際數。{u === 'thousand' && `金額以${unitLabel('thousand', p.settings.currency)}表達，因四捨五入，合計數與明細加總可能有尾差。`}</p>
               <div className="sig"><span>負責人：＿＿＿＿＿＿＿＿＿＿</span><span>財務主管：＿＿＿＿＿＿＿＿＿＿</span></div>
             </div></section>
           );

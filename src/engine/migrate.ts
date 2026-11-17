@@ -29,6 +29,7 @@ export function migrateProject(raw: any): Project {
     sc.fa ??= {};
     for (const c of FA_CLASSES) sc.fa[c.key] ??= emptyFaPlan(n);
     sc.a.equity.capCash ??= arr(n);
+    for (const k of ['capRedCash', 'capRedLoss', 'stockDiv', 'csToCap'] as const) sc.a.equity[k] ??= arr(n, 0);
     sc.a.others ??= {};
     sc.a.opex ??= {};
     for (const l of sc.loans) { l.accruedMonths ??= arr(n, 0); l.nextRepay ??= null; }
