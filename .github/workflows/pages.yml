@@ -1,0 +1,43 @@
+# 網頁版發布：將 release/ 中已建置之單一 HTML 檔 App 發布至 GitHub Pages
+# 網址：https://albee1203.github.io/-Reports/
+# 程式僅於使用者瀏覽器執行，財報資料存於各自瀏覽器，不會上傳。
+name: 發布網頁版
+
+on:
+  push:
+    branches: [main]
+    paths: ['release/**', '.github/workflows/pages.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: 準備網站檔案
+        run: |
+          set -euo pipefail
+          mkdir -p _site
+          f=$(ls release/*.html | sort | tail -n 1)
+          echo "發布：$f"
+          cp "$f" _site/index.html
+          cp release/*.zip _site/ 2>/dev/null || true
+          touch _site/.nojekyll
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
