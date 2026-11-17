@@ -20,3 +20,20 @@ describe('engine', () => {
     expect(missing.length).toBe(0);
   });
 });
+
+import { newProject, syncScenarioWithBase } from '../src/engine/project';
+import { collectIssues } from '../src/engine/checks';
+describe('incomplete project', () => {
+  it('flags missing assumptions without plugging', () => {
+    const p = newProject('測試', 2025);
+    p.base.manual = { cash: 10, revenue: 100, cogs: 60, capital: 10 };
+    syncScenarioWithBase(p, p.scenarios[0]);
+    const { g, info } = buildGraph(p, p.scenarios[0]);
+    const ev = evaluate(g);
+    const issues = collectIssues(p, p.scenarios[0], g, ev, info);
+    expect(issues.some((i) => i.level === 'incomplete' && i.item === '營收成長率' && i.year === 2026)).toBe(true);
+    expect(ev.incomplete('is:rev', info.cb + 1)).toBe(true);
+    expect(ev.incomplete('is:rev', info.cb)).toBe(false);
+    for (const c of info.fcols) expect(Math.abs(ev.num('ck:bs', c))).toBeLessThan(0.5);
+  });
+});

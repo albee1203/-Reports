@@ -287,3 +287,10 @@ export function cloneScenario(sc: Scenario, name: string): Scenario {
   c.id = uid(); c.name = name;
   return c;
 }
+
+// 報導期間預設文字（民國年）
+export function defaultPeriodText(p: Project, sheet: string) {
+  const s = p.settings; const [m, d] = s.fyEnd.split('-').map(Number);
+  const y0 = s.baseYear - 1911, y1 = s.baseYear + s.years - 1911;
+  return sheet === '資產負債表' ? `民國 ${y0} 年至 ${y1} 年各年 ${m} 月 ${d} 日` : `民國 ${y0} 年至 ${y1} 年各年度（1 月 1 日至 ${m} 月 ${d} 日）`;
+}

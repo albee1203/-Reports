@@ -2,7 +2,7 @@
 import ExcelJS from 'exceljs';
 import { Graph, EvalResult, exprToExcel, colLetter, exprToText, Row } from '../engine/graph';
 import { SH, STATEMENT_SHEETS } from '../engine/model';
-import { Project, Scenario } from '../engine/project';
+import { Project, Scenario, defaultPeriodText } from '../engine/project';
 import { reportStatus, Issue } from '../engine/checks';
 
 export type ExportMode = 'internal' | 'bank';
@@ -47,6 +47,7 @@ export async function buildWorkbook(o: ExportOptions): Promise<ExcelJS.Workbook>
   const wb = new ExcelJS.Workbook();
   wb.creator = '五年財務預估 App';
   wb.created = new Date();
+  wb.calcProperties = { ...(wb.calcProperties ?? {}), fullCalcOnLoad: true }; // 開啟時重算
   const status = reportStatus(o.issues, mode);
   const unitText = st.unit === 'thousand' ? '新台幣千元' : '新台幣元';
   const amtFmt = amountFormat(st.unit);
@@ -94,7 +95,7 @@ export async function buildWorkbook(o: ExportOptions): Promise<ExcelJS.Workbook>
     ws.getCell('A1').font = { bold: true, size: 13 };
     ws.getCell('A2').value = titleOf(name) + (isStmt ? (mode === 'bank' ? '' : `（情境：${scenario.name}）`) : '');
     ws.getCell('A2').font = { bold: true, size: 12 };
-    ws.getCell('A3').value = `${periodText(p, name, mode)}　單位：${unitText}${isStmt && status !== '可提供' ? `　【${status}】` : ''}`;
+    ws.getCell('A3').value = `${periodText(p, name, mode)}　單位：${unitText}${isStmt && status !== '已完成檢查' ? `　【${status}】` : ''}`;
     g.columns.forEach((col, ci) => {
       const c = ws.getCell(HEADER_ROWS - 1, FIRST_DATA_COL + ci);
       c.value = col.type === 'forecast' ? '預估' : col.type === 'base' ? '實際（基期）' : '實際（比較）';
@@ -175,14 +176,8 @@ export async function buildWorkbook(o: ExportOptions): Promise<ExcelJS.Workbook>
 }
 
 function periodText(p: Project, sheet: string, mode: ExportMode) {
-  const s = p.settings;
   const custom = mode === 'bank' ? p.bank.periodText[sheet] : undefined;
-  if (custom) return custom;
-  const mmdd = s.fyEnd.split('-');
-  const pointInTime = sheet === SH.bs;
-  return pointInTime
-    ? `${s.baseYear} 年至 ${s.baseYear + s.years} 年各年 ${+mmdd[0]} 月 ${+mmdd[1]} 日`
-    : `${s.baseYear} 年至 ${s.baseYear + s.years} 年各年度（截至 ${+mmdd[0]} 月 ${+mmdd[1]} 日止）`;
+  return custom || defaultPeriodText(p, sheet);
 }
 
 function writeCover(ws: ExcelJS.Worksheet, o: ExportOptions, status: string, unitText: string) {
