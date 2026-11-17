@@ -103,10 +103,37 @@ export function Grid({ sheet, filter, showDesc = true, title, carry = true }: { 
     }, { action: '貼上假設', detail: `${r.label} 起 ${matrix.length} 列 × ${matrix[0].length} 欄` });
     if (bad.length) alert(`下列儲存格格式不符，未貼上：\n${bad.slice(0, 10).join('\n')}`);
   };
+  // 類似 Excel 之鍵盤操作：Enter／Shift+Enter、上下鍵移動至上下列；游標在首尾時左右鍵移動至相鄰年度
+  const gridKeys = (e: React.KeyboardEvent<HTMLTableElement>) => {
+    const el = e.target as HTMLElement;
+    const td = el.closest('td.in') as HTMLElement | null;
+    if (!td || e.altKey || e.ctrlKey || e.metaKey) return;
+    const isSelect = el.tagName === 'SELECT';
+    const r0 = +td.dataset.r!, c0 = +td.dataset.c!;
+    let dr = 0, dc = 0;
+    if (e.key === 'Enter') dr = e.shiftKey ? -1 : 1;
+    else if (!isSelect && e.key === 'ArrowDown') dr = 1;
+    else if (!isSelect && e.key === 'ArrowUp') dr = -1;
+    else if (!isSelect && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
+      const inp = el as HTMLInputElement;
+      const atEnd = inp.selectionStart === inp.value.length && inp.selectionEnd === inp.value.length;
+      const atStart = inp.selectionStart === 0 && inp.selectionEnd === 0;
+      if (e.key === 'ArrowRight' && atEnd) dc = 1; else if (e.key === 'ArrowLeft' && atStart) dc = -1; else return;
+    } else return;
+    const table = e.currentTarget;
+    let target: HTMLElement | null = null;
+    if (dr) for (let r = r0 + dr; r >= 0 && r < rows.length && !target; r += dr) target = table.querySelector(`td.in[data-r="${r}"][data-c="${c0}"]`);
+    if (dc) for (let c = c0 + dc; c >= 0 && c < g.columns.length && !target; c += dc) target = table.querySelector(`td.in[data-r="${r0}"][data-c="${c}"]`);
+    const f = target?.querySelector('input, select') as HTMLInputElement | null;
+    if (!f) return;
+    e.preventDefault();
+    f.focus();
+    if (f.select) f.select();
+  };
   return (
     <div className="grid-wrap">
       {title && <h3>{title}</h3>}
-      <table className="grid">
+      <table className="grid" onKeyDownCapture={gridKeys}>
         <thead>
           <tr>
             <th className="lbl">項目</th>
@@ -116,7 +143,7 @@ export function Grid({ sheet, filter, showDesc = true, title, carry = true }: { 
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => {
+          {rows.map((r, ri) => {
             const hasInputs = r.cells.some((c, i) => c?.kind === 'input' && g.columns[i].type === 'forecast');
             return (
               <tr key={r.id} className={r.style ?? ''}>
@@ -125,7 +152,7 @@ export function Grid({ sheet, filter, showDesc = true, title, carry = true }: { 
                 {cols.map(({ c, i }) => {
                   const cell = r.cells[i];
                   if (!cell) return <td key={c.key} />;
-                  if (cell.kind === 'input') return <td key={c.key} className="in" onPasteCapture={(e) => onPaste(e, r, i)}><InputCell row={r} cell={cell} /></td>;
+                  if (cell.kind === 'input') return <td key={c.key} className="in" data-r={ri} data-c={i} onPasteCapture={(e) => onPaste(e, r, i)}><InputCell row={r} cell={cell} /></td>;
                   const inc = ev.incomplete(r.id, i);
                   const v = ev.value(r.id, i);
                   return (

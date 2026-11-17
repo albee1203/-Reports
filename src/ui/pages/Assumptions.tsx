@@ -28,6 +28,7 @@ export function AssumptionsPage() {
       <h1>3. 逐年假設（情境：{sc.name}）</h1>
       <ScenarioBar />
       <p className="muted">藍字欄位為輸入；紅框為未完成之必要假設。成長率以逐年手動輸入為主，可按「延用」將空白年度以前一年度值填入。基期欄為依實際數計算之參考值。點選任一計算數可追溯公式。</p>
+      <p className="hint">鍵盤操作：Enter／Shift+Enter 移至下／上一列，↑↓ 換列，游標在數字首尾時 ←→ 換年度，Tab 往右；可自 Excel 複製多格後貼上。</p>
       <Grid sheet={SH.assump} title="營收、成本及費用" filter={pre('a:growth', 'a:gm', 'a:depIn', 'a:depShare', 'a:opex')} />
       <Grid sheet={SH.rev} title="營收成本費用計算明細" carry={false} filter={(r) => !r.id.startsWith('c:oth')} />
       <Grid sheet={SH.assump} title="營運資金" filter={pre('a:ar', 'a:inv', 'a:ap')} />
