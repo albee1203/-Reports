@@ -60,7 +60,7 @@ export const DEFAULT_COA: AccountDef[] = [
   A('contract_liab', '預收款項', 'BS', 'CL', 'other', ['預收款項', '預收貨款', '合約負債'], { cf: 'operating' }),
   A('ltd_cur', '一年或一營業週期內到期長期負債', 'BS', 'CL', 'engine', ['一年內到期', '一年或一營業週期內到期']),
   A('lease_liab_cur', '租賃負債－流動', 'BS', 'CL', 'other', ['租賃負債－流動', '租賃負債-流動'], { cf: 'financing' }),
-  A('other_cl', '其他流動負債', 'BS', 'CL', 'other', ['其他流動負債', '代收款', '暫收款', '銷項稅額'], { cf: 'operating' }),
+  A('other_cl', '其他流動負債', 'BS', 'CL', 'other', ['其他流動負債', '代收款', '暫收款', '銷項稅額', '負債準備－流動', '負債準備'], { cf: 'operating' }),
   // 非流動負債
   A('ltd', '長期借款', 'BS', 'NCL', 'engine', ['長期借款', '長期銀行借款']),
   A('dtl', '遞延所得稅負債', 'BS', 'NCL', 'other', ['遞延所得稅負債'], { cf: 'operating' }),
@@ -82,10 +82,10 @@ export const DEFAULT_COA: AccountDef[] = [
   A('other_opex', '其他營業費用', 'IS', 'OPEX', 'engine', ['其他營業費用', '預期信用減損']),
   A('int_income', '利息收入', 'IS', 'NONOP', 'other', ['利息收入']),
   A('other_income', '其他收入', 'IS', 'NONOP', 'other', ['其他收入', '租金收入', '股利收入', '營業外收入']),
-  A('other_gl', '其他利益及損失', 'IS', 'NONOP', 'other', ['其他利益及損失', '兌換', '處分', '其他損失', '營業外支出', '其他利益'], { canBeNegative: true }),
+  A('other_gl', '其他利益及損失', 'IS', 'NONOP', 'other', ['其他利益及損失', '兌換', '處分', '其他損失', '營業外支出', '其他利益', '採用權益法認列', '關聯企業損益之份額'], { canBeNegative: true }),
   A('fin_cost', '財務成本', 'IS', 'NONOP', 'engine', ['財務成本', '利息費用', '利息支出']),
   A('tax_exp', '所得稅費用', 'IS', 'TAX', 'engine', ['所得稅費用', '所得稅']),
-  A('oci', '其他綜合損益（稅後淨額）', 'IS', 'OCI', 'engine', ['其他綜合損益'], { canBeNegative: true }),
+  A('oci', '其他綜合損益（稅後淨額）', 'IS', 'OCI', 'engine', ['其他綜合損益', '確定福利計畫之再衡量數', '財務報表換算之兌換差額', '不重分類至損益', '重分類至損益之項目', '透過其他綜合損益按公允價值衡量'], { canBeNegative: true }),
 ];
 
 // 原表小計/合計判斷（用於核對，不計入明細）

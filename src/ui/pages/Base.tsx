@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useP, fmtVal } from '../ctx';
 import { NumInput } from '../Grid';
 import { allAccounts, SECTION_NAMES, Section, AccountDef, CfClass } from '../../engine/coa';
-import { readFile, SheetData, guessLayout, buildLines, newRawImport, applyImport, remapLine, reconcileSubtotals, MapConfig, parseAmount } from '../../engine/importer';
+import { readFile, SheetData, guessLayout, guessUnit, buildLines, newRawImport, applyImport, remapLine, reconcileSubtotals, MapConfig, parseAmount } from '../../engine/importer';
 import { matchCfRow, CF_TOTAL_ROWS } from '../../engine/cfImport';
 import { parseSce, findHeaderRow, sceTotals, COMP_LABEL, Comp, Move, TEMPLATE_ROWS, TEMPLATE_COLS } from '../../engine/sceImport';
 import { download } from '../store';
@@ -43,14 +43,32 @@ function ImportWizard({ year }: { year: number }) {
   const [sheetIdx, setSheetIdx] = useState(0);
   const [cfg, setCfg] = useState<Omit<MapConfig, 'fileName' | 'sheet'> | null>(null);
   const [err, setErr] = useState('');
+  const [comp, setComp] = useState<{ col: number | null; year: number }>({ col: null, year: year - 1 });
+  const [detected, setDetected] = useState<string[]>([]);
+  const [done, setDone] = useState<string[]>([]); // 本檔已匯入之工作表
   const onFile = async (f: File) => {
-    setErr('');
+    setErr(''); setDone([]);
     try {
       const sheets = await readFile(f.name, await f.arrayBuffer());
       setFile({ name: f.name, sheets }); setSheetIdx(0);
       const lay = guessLayout(sheets[0].rows);
-      setCfg({ stmt: 'BS', year, currency: 'TWD', unitMultiplier: 1, signConvention: 'presentation', ...lay });
+      applyGuess(sheets[0]);
     } catch (e: any) { setErr(e.message ?? String(e)); }
+  };
+  // 自動辨識版面、金額單位、報表類型與年度欄
+  const applyGuess = (sh: SheetData) => {
+    const lay = guessLayout(sh.rows);
+    const unit = guessUnit(sh.rows);
+    const text = sh.rows.slice(0, 6).flat().join('');
+    const stmt = /損益表/.test(text) ? 'IS' : /資產負債表/.test(text) ? 'BS' : /試算表/.test(text) ? 'TB' : 'BS';
+    setCfg({ stmt, year, currency: 'TWD', unitMultiplier: unit ?? 1, signConvention: 'presentation', headerRow: lay.headerRow, labelCol: lay.labelCol, amountCol: lay.amountCol });
+    setComp({ col: lay.compCol ?? null, year: lay.compYear ?? year - 1 });
+    const d: string[] = [];
+    if (unit) d.push(`金額單位：${unit === 1000 ? '千元' : unit === 1e6 ? '百萬元' : '元'}（依表頭）`);
+    d.push(`報表類型：${{ BS: '資產負債表', IS: '綜合損益表', TB: '試算表' }[stmt]}`);
+    if (lay.year && lay.year !== year) d.push(`⚠ 金額欄標題年度為 ${lay.year}，與匯入目標年度 ${year} 不同，請確認金額欄`);
+    if (lay.compCol !== undefined) d.push(`偵測到第二個年度金額欄（${lay.compYear ?? '年度未知'}），可同時匯入為前期比較`);
+    setDetected(d);
   };
   const sheet = file?.sheets[sheetIdx];
   const doImport = () => {
@@ -61,28 +79,49 @@ function ImportWizard({ year }: { year: number }) {
       np.imports.push(raw);
       const yd = yearOf(np, year)!;
       applyImport(yd, raw, buildLines(sheet.rows, full, raw.id, np.customAccounts), np.customAccounts);
-    }, { action: '匯入財報', detail: `${file.name}／${sheet.name}／${cfg.stmt}／${year}` });
-    setFile(null);
+      // 同一張表之前期金額欄 → 前期比較年度（基期維持不變）
+      if (comp.col !== null && comp.year !== year && comp.year !== np.base.year) {
+        const fc: MapConfig = { ...full, amountCol: comp.col, year: comp.year };
+        const raw2 = newRawImport(fc, sheet.rows);
+        np.imports.push(raw2);
+        let cy = np.comparatives.find((c) => c.year === comp.year);
+        if (!cy) { cy = emptyYear(comp.year); np.comparatives.push(cy); }
+        applyImport(cy, raw2, buildLines(sheet.rows, fc, raw2.id, np.customAccounts), np.customAccounts);
+      }
+    }, { action: '匯入財報', detail: `${file.name}／${sheet.name}／${cfg.stmt}／${year}${comp.col !== null ? `＋前期 ${comp.year}` : ''}` });
+    // 保留檔案，可直接切換至下一張工作表繼續匯入
+    const nd = [...done, sheet.name];
+    setDone(nd);
+    const next = file.sheets.findIndex((s) => !nd.includes(s.name));
+    if (next >= 0) { setSheetIdx(next); applyGuess(file.sheets[next]); } else setFile(null);
   };
   const set = (k: string, v: any) => setCfg((c) => ({ ...c!, [k]: v }));
   return (
     <section className="card">
       <h2>匯入 Excel／CSV（{year} 年度）</h2>
-      <label className="file">選擇檔案（.xlsx、.csv）<input type="file" accept=".xlsx,.csv,.txt" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} /></label>
+      <label className="file">選擇檔案（.xlsx、.csv）<input type="file" accept=".xlsx,.csv,.txt" onChange={(e) => { if (e.target.files?.[0]) onFile(e.target.files[0]); e.target.value = ''; }} /></label>
+      {done.length > 0 && <p className="ok small">已匯入工作表：{done.join('、')}{file ? '；可繼續匯入下一張工作表，或按「完成」。' : '。'}</p>}
       {err && <p className="error">{err}</p>}
       {file && sheet && cfg && (
         <>
           <div className="form compact">
-            <label>工作表<select value={sheetIdx} onChange={(e) => { const i = +e.target.value; setSheetIdx(i); setCfg({ ...cfg, ...guessLayout(file.sheets[i].rows) }); }}>{file.sheets.map((s, i) => <option key={i} value={i}>{s.name}</option>)}</select></label>
+            <label>工作表<select value={sheetIdx} onChange={(e) => { const i = +e.target.value; setSheetIdx(i); applyGuess(file.sheets[i]); }}>{file.sheets.map((s, i) => <option key={i} value={i}>{s.name}{done.includes(s.name) ? '（已匯入）' : ''}</option>)}</select></label>
             <label>報表類型<select value={cfg.stmt} onChange={(e) => set('stmt', e.target.value)}><option value="BS">資產負債表</option><option value="IS">綜合損益表</option><option value="TB">試算表（兩表合一）</option></select></label>
             <label>年度<input value={year} disabled /></label>
             <label>幣別<input value={cfg.currency} onChange={(e) => set('currency', e.target.value)} /></label>
             <label>金額單位<select value={cfg.unitMultiplier} onChange={(e) => set('unitMultiplier', +e.target.value)}><option value={1}>元</option><option value={1000}>千元</option><option value={1000000}>百萬元</option></select></label>
             <label>正負號慣例<select value={cfg.signConvention} onChange={(e) => set('signConvention', e.target.value)}><option value="presentation">報表表達（正常餘額為正）</option><option value="debitPositive">借方正、貸方負（試算表）</option></select></label>
             <label>標題列（第幾列）<NumInput value={cfg.headerRow + 1} onCommit={(v) => v && set('headerRow', v - 1)} /></label>
-            <label>科目欄<select value={cfg.labelCol} onChange={(e) => set('labelCol', +e.target.value)}>{colOpts(sheet)}</select></label>
-            <label>金額欄<select value={cfg.amountCol} onChange={(e) => set('amountCol', +e.target.value)}>{colOpts(sheet)}</select></label>
+            <label>科目欄<select value={cfg.labelCol} onChange={(e) => set('labelCol', +e.target.value)}>{colOpts(sheet, cfg.headerRow)}</select></label>
+            <label>金額欄（{year}）<select value={cfg.amountCol} onChange={(e) => set('amountCol', +e.target.value)}>{colOpts(sheet, cfg.headerRow)}</select></label>
+            {year === p.base.year && (
+              <label>前期比較金額欄（選填）
+                <select value={comp.col ?? ''} onChange={(e) => setComp({ ...comp, col: e.target.value === '' ? null : +e.target.value })}><option value="">（不匯入）</option>{colOpts(sheet, cfg.headerRow)}</select>
+              </label>
+            )}
+            {year === p.base.year && comp.col !== null && <label>前期年度<NumInput value={comp.year} onCommit={(v) => v && setComp({ ...comp, year: v })} /></label>}
           </div>
+          {detected.length > 0 && <div className="small">{detected.map((d, i) => <div key={i} className={d.startsWith('⚠') ? 'warn' : 'muted'}>{d.startsWith('⚠') ? d : `已自動辨識：${d}`}</div>)}</div>}
           {cfg.currency !== p.settings.currency && <p className="warn">匯入幣別（{cfg.currency}）與專案幣別（{p.settings.currency}）不同，第一版不自動換算，請確認。</p>}
           <div className="preview">
             <table className="grid small">
@@ -96,14 +135,17 @@ function ImportWizard({ year }: { year: number }) {
               </tbody>
             </table>
           </div>
-          <button className="primary" onClick={doImport}>解析並建立對應</button> <button onClick={() => setFile(null)}>取消</button>
+          <button className="primary" onClick={doImport}>解析並建立對應</button> <button onClick={() => setFile(null)}>{done.length ? '完成' : '取消'}</button>
         </>
       )}
     </section>
   );
 }
 
-const colOpts = (s: SheetData) => Array.from({ length: Math.max(1, ...s.rows.map((r) => r.length)) }, (_, c) => <option key={c} value={c}>{String.fromCharCode(65 + (c % 26))}{c >= 26 ? c : ''} 欄</option>);
+const colOpts = (s: SheetData, hdr = -1) => Array.from({ length: Math.max(1, ...s.rows.map((r) => r.length)) }, (_, c) => {
+  const h = hdr >= 0 ? String(s.rows[hdr]?.[c] ?? '').replace(/\s+/g, ' ').trim() : '';
+  return <option key={c} value={c}>{String.fromCharCode(65 + (c % 26))}{c >= 26 ? c : ''} 欄{h ? `（${h.slice(0, 16)}）` : ''}</option>;
+});
 
 function acctOptions(custom: AccountDef[], stmt?: string) {
   const all = allAccounts(custom).filter((a) => !stmt || stmt === 'TB' || a.stmt === stmt);

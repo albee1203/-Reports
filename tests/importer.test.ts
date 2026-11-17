@@ -24,7 +24,7 @@ describe('importer', () => {
   });
   it('maps, flags and reconciles', () => {
     const lay = guessLayout(rows);
-    expect(lay).toEqual({ headerRow: 2, labelCol: 0, amountCol: 1 });
+    expect(lay).toMatchObject({ headerRow: 2, labelCol: 0, amountCol: 1 });
     const cfg = { fileName: 't.csv', sheet: 'CSV', stmt: 'BS' as const, year: 2025, currency: 'TWD', unitMultiplier: 1000, signConvention: 'presentation' as const, ...lay };
     const raw = newRawImport(cfg, rows);
     const lines = buildLines(rows, cfg, raw.id);

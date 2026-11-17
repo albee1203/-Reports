@@ -71,9 +71,13 @@ export interface MapConfig {
 const EXPENSE_SECTIONS = ['COGS', 'OPEX', 'TAX'];
 const CREDIT_SECTIONS = ['CL', 'NCL', 'EQ', 'REV', 'NONOP', 'OCI'];
 
-export function normalizeSign(amount: number, acc: AccountDef | undefined, conv: 'presentation' | 'debitPositive'): { value: number; issue?: string } {
+export function normalizeSign(amount: number, acc: AccountDef | undefined, conv: 'presentation' | 'debitPositive', expenseNegative = false): { value: number; issue?: string } {
   if (!acc) return { value: amount };
   let v = amount;
+  // 損益表以負數（括號）表示費用之慣例：費用取絕對值，正數費用提示確認
+  if (expenseNegative && conv === 'presentation' && (EXPENSE_SECTIONS.includes(acc.section) || acc.code === 'fin_cost')) {
+    return v <= 0 ? { value: -v } : { value: v, issue: '此表費用以負數表示，本列為正數，請確認是否為迴轉或利益' };
+  }
   if (conv === 'debitPositive') {
     const creditNormal = acc.contra ? ['CA', 'NCA'].includes(acc.section) : CREDIT_SECTIONS.includes(acc.section) && !(acc.code === 'fin_cost');
     if (creditNormal) v = -v;
@@ -89,11 +93,14 @@ export function buildLines(rows: string[][], cfg: MapConfig, importId: string, c
   const lines: MappedLine[] = [];
   const seen = new Map<string, number>();
   const stmt = cfg.stmt === 'TB' ? null : cfg.stmt;
+  const expenseNegative = detectExpenseNegative(rows, cfg, custom);
   for (let i = cfg.headerRow + 1; i < rows.length; i++) {
     const row = rows[i] ?? [];
     const label = String(row[cfg.labelCol] ?? '').trim();
     const raw = String(row[cfg.amountCol] ?? '').trim();
     if (!label && !raw) continue;
+    // 無金額之列（分類標題，如「流動資產」「營業費用」）：略過，不列為問題
+    if (label && !raw) { lines.push({ importId, rowIndex: i, label, rawAmount: '', amount: null, account: null, kind: 'ignore', issues: [], confirmed: true }); continue; }
     if (!label) { lines.push({ importId, rowIndex: i, label: '（無科目名稱）', rawAmount: raw, amount: null, account: null, kind: 'ignore', issues: ['無科目名稱，已略過'], confirmed: false }); continue; }
     const issues: string[] = [];
     const pa = parseAmount(raw);
@@ -110,11 +117,10 @@ export function buildLines(rows: string[][], cfg: MapConfig, importId: string, c
     let amount = pa.value === null ? null : pa.value * cfg.unitMultiplier;
     if (!account) issues.push('未對應科目');
     if (amount !== null && account) {
-      const r = normalizeSign(amount, findAccount(account, custom), cfg.signConvention);
+      const r = normalizeSign(amount, findAccount(account, custom), cfg.signConvention, expenseNegative);
       amount = r.value;
       if (r.issue) issues.push(r.issue);
     }
-    if (raw === '' ) issues.push('金額空白');
     lines.push({ importId, rowIndex: i, label, rawAmount: raw, amount, account, kind: 'detail', issues, confirmed: false });
   }
   return lines;
@@ -127,7 +133,7 @@ export function remapLine(l: MappedLine, account: string | null, imp: RawImport 
   const issues = l.issues.filter((x) => x.startsWith('科目名稱重複') || x.startsWith('金額格式錯誤'));
   let amount = pa.value === null ? null : pa.value * (imp?.unitMultiplier ?? 1);
   if (account && amount !== null) {
-    const r = normalizeSign(amount, findAccount(account, custom), imp?.signConvention ?? 'presentation');
+    const r = normalizeSign(amount, findAccount(account, custom), imp?.signConvention ?? 'presentation', imp ? detectExpenseNegative(imp.rows, imp, custom) : false);
     amount = r.value; if (r.issue) issues.push(r.issue);
   }
   if (!account && l.kind === 'detail') issues.push('未對應科目');
@@ -185,20 +191,70 @@ export function newRawImport(cfg: MapConfig, rows: string[][]): RawImport {
   return { id: uid(), fileName: cfg.fileName, sheet: cfg.sheet, stmt: cfg.stmt, year: cfg.year, currency: cfg.currency, unitMultiplier: cfg.unitMultiplier, signConvention: cfg.signConvention, labelCol: cfg.labelCol, amountCol: cfg.amountCol, headerRow: cfg.headerRow, rows, importedAt: new Date().toISOString() };
 }
 
-// 猜測標題列、科目欄、金額欄
-export function guessLayout(rows: string[][]): { headerRow: number; labelCol: number; amountCol: number } {
+// 偵測損益表是否以負數（括號）表示費用：已對應之費用科目多數為負數
+export function detectExpenseNegative(rows: string[][], cfg: { headerRow: number; labelCol: number; amountCol: number; stmt: string }, custom: AccountDef[] = []): boolean {
+  if (cfg.stmt === 'BS') return false;
+  let neg = 0, pos = 0;
+  for (let i = cfg.headerRow + 1; i < rows.length; i++) {
+    const r = rows[i] ?? [];
+    const label = String(r[cfg.labelCol] ?? '');
+    if (!label || detectSubtotal(label)) continue;
+    const code = suggestAccount(label, cfg.stmt === 'TB' ? null : 'IS', custom);
+    const acc = code ? findAccount(code, custom) : undefined;
+    if (!acc || !(['COGS', 'OPEX', 'TAX'].includes(acc.section) || acc.code === 'fin_cost')) continue;
+    const v = parseAmount(String(r[cfg.amountCol] ?? '')).value;
+    if (v === null || v === 0) continue;
+    if (v < 0) neg++; else pos++;
+  }
+  return neg > pos;
+}
+
+// 由表頭文字辨識金額單位（「單位：新台幣千元」等）
+export function guessUnit(rows: string[][]): number | null {
+  const text = rows.slice(0, 8).flat().join(' ');
+  if (/百萬元/.test(text)) return 1_000_000;
+  if (/千元/.test(text)) return 1000;
+  if (/單位[：:]\s*(新台幣)?元/.test(text)) return 1;
+  return null;
+}
+
+// 由欄標題辨識年度：「114年」（民國）或「2025」
+export function yearFromHeader(h: string): number | null {
+  const t = String(h ?? '');
+  const m = t.match(/(\d{3,4})\s*年/) ?? t.match(/\b(20\d{2}|19\d{2})\b/);
+  if (!m) return null;
+  const y = +m[1];
+  return y < 1911 ? y + 1911 : y;
+}
+
+// 猜測標題列、科目欄、金額欄（並辨識第二個年度金額欄，供同時匯入前期比較）
+export function guessLayout(rows: string[][]): { headerRow: number; labelCol: number; amountCol: number; compCol?: number; year?: number; compYear?: number } {
   let headerRow = 0;
   for (let i = 0; i < Math.min(rows.length, 15); i++) {
-    if ((rows[i] ?? []).some((c) => /科目|項目|會計項目|名稱/.test(c))) { headerRow = i; break; }
+    const r = rows[i] ?? [];
+    if (r.some((c) => /科目|項目|名稱|代碼|金額/.test(c))) { headerRow = i; break; }
   }
-  const sample = rows.slice(headerRow + 1, headerRow + 40);
-  const width = Math.max(0, ...sample.map((r) => r.length));
-  let labelCol = 0, amountCol = 1, bestText = -1, bestNum = -1;
+  const hdr = rows[headerRow] ?? [];
+  const sample = rows.slice(headerRow + 1, headerRow + 60);
+  const width = Math.max(0, hdr.length, ...sample.map((r) => r.length));
+  let labelCol = 0, bestText = -1;
+  const numScore: { c: number; score: number }[] = [];
   for (let c = 0; c < width; c++) {
-    const text = sample.filter((r) => r[c] && /[一-鿿]/.test(r[c])).length;
-    const num = sample.filter((r) => r[c] && parseAmount(r[c]).value !== null && !parseAmount(r[c]).error).length;
+    const cells = sample.map((r) => String(r[c] ?? '').trim()).filter(Boolean);
+    const text = cells.filter((x) => /[一-鿿]/.test(x)).length;
     if (text > bestText) { bestText = text; labelCol = c; }
-    if (num > bestNum && c !== labelCol) { bestNum = num; amountCol = c; }
+    const nums = cells.map((x) => parseAmount(x)).filter((p) => p.value !== null && !p.error).map((p) => Math.abs(p.value!));
+    const h = String(hdr[c] ?? '');
+    const codeLike = /代碼|編號/.test(h) || cells.filter((x) => /^\d{4}$|X/.test(x)).length > cells.length / 2;
+    const pctLike = /%|％|比率/.test(h) || (nums.length > 0 && nums.filter((v) => v <= 100).length / nums.length > 0.8);
+    if (!nums.length || codeLike || pctLike) continue;
+    numScore.push({ c, score: nums.length + (/金額|年|\d{4}/.test(h) ? 5 : 0) });
   }
-  return { headerRow, labelCol, amountCol };
+  const cand = numScore.filter((x) => x.c !== labelCol).sort((a, b) => b.score - a.score || a.c - b.c);
+  const byPos = cand.slice(0, 2).sort((a, b) => a.c - b.c);
+  const amountCol = byPos[0]?.c ?? (labelCol + 1);
+  const compCol = byPos[1] && byPos[1].score >= byPos[0].score * 0.6 ? byPos[1].c : undefined;
+  const year = yearFromHeader(hdr[amountCol] ?? '') ?? undefined;
+  const compYear = compCol !== undefined ? yearFromHeader(hdr[compCol] ?? '') ?? undefined : undefined;
+  return { headerRow, labelCol, amountCol, ...(compCol !== undefined ? { compCol } : {}), ...(year ? { year } : {}), ...(compYear ? { compYear } : {}) };
 }

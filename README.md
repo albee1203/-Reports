@@ -4,13 +4,22 @@
 
 完整規劃請見 [docs/規劃書.md](docs/規劃書.md)，內容包括架構、畫面、輸入欄位、公式、勾稽、Excel 工作表設計，以及尚未指定事項的影響與預設選項。
 
-## 使用
+## 直接使用（不需安裝）
+
+下載 `release/` 資料夾中的 `五年財務預估App_v*.html`，用 Chrome 或 Edge 開啟即可。
+* 不需安裝、不需網路，所有資料只存在這台電腦的瀏覽器中。
+* 請固定用同一個瀏覽器開啟同一個檔案位置；換瀏覽器或清除瀏覽器資料會看不到原專案，請定期在「匯出」頁下載備份（可加密）。
+* 列印 PDF 時請選 A4、取消「頁首及頁尾」。
+
+## 開發
 
 ```bash
 npm install
 npm run dev        # 開發模式，瀏覽器開啟顯示之網址
 npm run build      # 產生靜態檔於 dist/，可直接以任何靜態伺服器開啟
-npm test           # 引擎、匯入及 Excel 公式一致性測試（需安裝 LibreOffice）
+npm test           # 單元、壓力（500 組隨機）與 Excel 公式一致性測試（需安裝 LibreOffice）
+npm run build:app  # 產出單一 HTML 檔 App 至 release/
+npm run e2e -- release/<檔名>.html   # 端到端實測（會計師版式財報 → 匯出 Excel／PDF）
 ```
 
 ## 資料保護

@@ -538,11 +538,12 @@ export function buildGraph(p: Project, sc: Scenario): { g: Graph; info: ModelInf
       secRows[sec].push(id);
     }
     const tot = (c: number) => add(...secRows[sec].map((x) => r(x, c)));
-    bsRow(`bs:t_${sec}`, `${SECTION_LABEL[sec]}合計`, tot, tot, { style: 'subtotal' });
+    // 權益不另列小計，直接以「權益總計」表達，避免重複
+    if (sec !== 'EQ') bsRow(`bs:t_${sec}`, `${SECTION_LABEL[sec]}合計`, tot, tot, { style: 'subtotal' });
     if (sec === 'NCA') { const f = (c: number) => add(r('bs:t_CA', c), r('bs:t_NCA', c)); bsRow('bs:assets', '資產總計', f, f, { style: 'total' }); }
     if (sec === 'NCL') { const f = (c: number) => add(r('bs:t_CL', c), r('bs:t_NCL', c)); bsRow('bs:liab', '負債總計', f, f, { style: 'total' }); }
   }
-  { const f = (c: number) => r('bs:t_EQ', c); bsRow('bs:equity', '權益總計', f, f, { style: 'total' }); }
+  { const f = (c: number) => add(...secRows.EQ.map((x) => r(x, c))); bsRow('bs:equity', '權益總計', f, f, { style: 'total' }); }
   { const f = (c: number) => add(r('bs:liab', c), r('bs:equity', c)); bsRow('bs:le', '負債及權益總計', f, f, { style: 'total' }); }
 
   // ===== 權益變動表 =====
@@ -621,9 +622,12 @@ export function buildGraph(p: Project, sc: Scenario): { g: Graph; info: ModelInf
   rRow('r:cfo_cov', '營業現金流量÷流動負債', 'pct', (c) => ratio(r('cf:op', c), r('bs:t_CL', c)), '營業活動淨現金流量÷流動負債；僅預估年度', { forecastOnly: true, indent: 1 });
 
   // ===== 勾稽檢查 =====
+  // 前期比較欄僅有歷史報表，排程類勾稽（權益變動表、固定資產、借款）不適用，僅檢查資產負債平衡
   const ckAll = (id: string, label: string, f: (c: number) => Expr, baseF?: (c: number) => Expr, desc?: string) => {
-    frow(SH.ck, id, label, 'amount', f, { base: baseF, comp: baseF, desc });
-    frow(SH.ck, `${id}:st`, `${label}－結果`, 'status', (c) => iff(cmp('<', fn('ABS', r(id, c)), n(0.5)), s('通過'), s('差異')), { base: baseF ? (c) => iff(cmp('<', fn('ABS', r(id, c)), n(0.5)), s('通過'), s('差異')) : undefined, comp: baseF ? (c) => iff(cmp('<', fn('ABS', r(id, c)), n(0.5)), s('通過'), s('差異')) : undefined });
+    const compF = id === 'ck:bs' ? baseF : undefined;
+    const st = (c: number) => iff(cmp('<', fn('ABS', r(id, c)), n(0.5)), s('通過'), s('差異'));
+    frow(SH.ck, id, label, 'amount', f, { base: baseF, comp: compF, desc });
+    frow(SH.ck, `${id}:st`, `${label}－結果`, 'status', st, { base: baseF ? st : undefined, comp: compF ? st : undefined });
   };
   ckAll('ck:bs', '資產−負債−權益', (c) => sub(r('bs:assets', c), r('bs:le', c)), (c) => sub(r('bs:assets', c), r('bs:le', c)));
   ckAll('ck:cash', '現金流量表期末現金−資產負債表現金', (c) => sub(r('cf:close', c), r('bs:cash', c)));
