@@ -152,6 +152,7 @@ export interface Version { id: string; label: string; at: string; snapshot: stri
 
 export interface Project {
   id: string;
+  schemaVersion?: number;
   name: string;
   createdAt: string;
   updatedAt: string;

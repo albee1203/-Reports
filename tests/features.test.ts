@@ -70,7 +70,7 @@ describe('input sanity', () => {
 });
 
 import { assumptionDiff } from '../src/engine/diff';
-import { cloneScenario } from '../src/engine/project';
+import { cloneScenario, M } from '../src/engine/project';
 describe('假設差異', () => {
   it('列出不同情境之假設與覆寫差異', () => {
     const p = sampleProject();
@@ -82,5 +82,19 @@ describe('假設差異', () => {
     expect(d.map((x) => `${x.rowId}@${x.year}`).sort()).toEqual(['a:growth@2027', 'c:cogs@2029']);
     expect(d.find((x) => x.rowId === 'a:growth')!.values).toEqual([0.07, 0.02]);
     expect(assumptionDiff([buildGraph(p, a).g, buildGraph(p, a).g])).toEqual([]);
+  });
+});
+
+import { collectIssues } from '../src/engine/checks';
+import { evaluate as ev2 } from '../src/engine/graph';
+describe('參數像金額', () => {
+  it('方法為成長率但參數過大時列為錯誤', () => {
+    const p = sampleProject();
+    const sc = p.scenarios[0];
+    sc.a.others.other_income.method[0] = M.GROWTH;
+    sc.a.others.other_income.param[0] = 1_000_000;
+    const { g, info } = buildGraph(p, sc);
+    const xs = collectIssues(p, sc, g, ev2(g), info);
+    expect(xs.some((x) => x.level === 'error' && x.message.includes('看似金額') && x.year === 2026)).toBe(true);
   });
 });

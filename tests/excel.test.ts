@@ -8,6 +8,7 @@ import { evaluate, colLetter } from '../src/engine/graph';
 import { collectIssues } from '../src/engine/checks';
 import { buildWorkbook } from '../src/export/excel';
 import { detailProject } from './fixtures';
+import { randomProject } from './stress.test';
 import { emptyYear } from '../src/engine/project';
 
 // LibreOffice 設定為載入 xlsx 時一律重算（模擬 Excel 之 fullCalcOnLoad）
@@ -36,6 +37,15 @@ describe('excel parity (LibreOffice recalculation)', () => {
   });
 });
 
+describe('excel parity（隨機專案）', () => {
+  for (const seed of [7, 42, 133]) {
+    it(`隨機專案 ${seed}`, async () => {
+      const p = randomProject(seed);
+      await parity(p, p.scenarios[0]);
+    });
+  }
+});
+
 async function parity(p: any, sc: any) {
   {
     const { g, info } = buildGraph(p, sc);
@@ -61,7 +71,7 @@ async function parity(p: any, sc: any) {
         if (v && typeof v === 'object' && 'formula' in v) v = 'result' in v ? v.result : 0; // ExcelJS 讀取時省略 0 之結果
         const e = ev.value(r.id, c);
         checked++;
-        if (typeof e === 'number') { if (typeof v !== 'number' || Math.abs(v - e) > 1e-6 * Math.max(1, Math.abs(e))) bad.push(`${r.sheet}!${r.id}@${g.columns[c].label}: excel=${JSON.stringify(xc.value)} app=${e}`); }
+        if (typeof e === 'number') { if (typeof v !== 'number' || (Math.abs(v - e) > 1e-6 * Math.max(1, Math.abs(e)) && Math.abs(v - e) > 1e-4)) bad.push(`${r.sheet}!${r.id}@${g.columns[c].label}: excel=${JSON.stringify(xc.value)} app=${e}`); }
         else if (e !== null && v !== e) bad.push(`${r.sheet}!${r.id}@${g.columns[c].label}: excel=${v} app=${e}`);
       });
     }

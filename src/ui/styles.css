@@ -51,6 +51,7 @@ td.actions { display: flex; gap: 4px; }
 .nav { background: var(--brand); color: #dfe7f5; padding: 14px 10px; position: sticky; top: 0; height: 100vh; overflow: auto; }
 .nav .brand { cursor: pointer; font-size: 12px; opacity: .8; margin-bottom: 10px; }
 .nav .proj-name { font-weight: 700; font-size: 16px; color: #fff; }
+.nav .menu-btn { display: none; }
 .nav .muted { color: #aab8d3; }
 .nav nav { display: flex; flex-direction: column; margin: 12px 0; gap: 2px; }
 .nav nav a { color: #dfe7f5; padding: 7px 8px; border-radius: 6px; display: flex; gap: 6px; align-items: center; }
@@ -161,8 +162,13 @@ table.pt tr.total td { border-top: 0.5px solid #000; border-bottom: 2px double #
   .page:last-child { break-after: auto; }
 }
 @media (max-width: 900px) {
-  .app { grid-template-columns: 1fr; }
-  .nav { position: static; height: auto; }
+  .app { grid-template-columns: 1fr; align-content: start; }
+  .nav { position: sticky; top: 0; height: auto; z-index: 30; padding: 8px 12px; }
+  .nav .nav-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .nav .menu-btn { display: inline-block; background: rgba(255,255,255,.15); color: #fff; border-color: transparent; }
+  .nav:not(.open) > :not(.nav-top) { display: none; }
+  .nav.open { max-height: 100vh; overflow: auto; }
+  .main { padding: 14px 12px; }
   .trace { position: fixed; right: 0; top: 0; z-index: 40; width: min(360px, 100vw); }
   .two-col { grid-template-columns: 1fr; }
 }
@@ -202,3 +208,7 @@ tr.st-done td.icon { color: var(--ok); } tr.st-warn td.icon { color: var(--warn)
 .subcard { border: 1px dashed var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
 
 td.changed { background: #fff3d6; font-weight: 600; }
+/* 報表左右捲動時科目欄固定 */
+table.grid.stmt td.lbl, table.grid.stmt th.lbl { position: sticky; left: 0; z-index: 2; background: #fff; }
+table.grid.stmt tr.header td.lbl { background: #f4f6f9; }
+table.grid.stmt th.lbl { z-index: 3; background: #f7f8fa; }

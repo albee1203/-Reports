@@ -1,6 +1,7 @@
 // 本機儲存（IndexedDB）。資料不傳送至任何外部服務。
 import { get, set, del } from 'idb-keyval';
 import { Project, uid, Version } from '../engine/project';
+import { migrateProject } from '../engine/migrate';
 
 export interface ProjectMeta { id: string; name: string; company: string; baseYear: number; updatedAt: string }
 
@@ -11,7 +12,19 @@ export async function listProjects(): Promise<ProjectMeta[]> {
 }
 
 export async function loadProject(id: string): Promise<Project | undefined> {
-  return (await get(`proj:${id}`)) as Project | undefined;
+  const raw = await get(`proj:${id}`);
+  return raw ? migrateProject(raw) : undefined;
+}
+
+// 申請持久儲存，降低瀏覽器在空間不足時自動清除本機資料之機會
+export async function requestPersistence(): Promise<{ persisted: boolean | null; usage?: number; quota?: number }> {
+  try {
+    const sm = navigator.storage;
+    if (!sm?.persist) return { persisted: null };
+    const persisted = (await sm.persisted()) || (await sm.persist());
+    const est = await sm.estimate?.();
+    return { persisted, usage: est?.usage, quota: est?.quota };
+  } catch { return { persisted: null }; }
 }
 
 export async function saveProject(p: Project) {
@@ -42,7 +55,7 @@ export function snapshot(p: Project, label: string): Version {
 }
 
 export function restoreVersion(p: Project, v: Version): Project {
-  const data = JSON.parse(v.snapshot);
+  const data = migrateProject({ ...JSON.parse(v.snapshot), versions: [] });
   return { ...data, id: p.id, versions: p.versions, log: [...p.log, { at: new Date().toISOString(), action: '還原版本', detail: `${v.label}（${v.at}）` }] };
 }
 

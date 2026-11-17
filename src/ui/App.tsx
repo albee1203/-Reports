@@ -5,7 +5,9 @@ import { evaluate } from '../engine/graph';
 import { collectIssues, reportStatus } from '../engine/checks';
 import { sampleProject } from '../engine/sample';
 import { ProjectCtx, Ctx, traceInfo, fmtVal, useP } from './ctx';
-import { listProjects, loadProject, saveProject, deleteProject, copyProject, ProjectMeta, download } from './store';
+import { listProjects, loadProject, saveProject, deleteProject, copyProject, ProjectMeta, download, requestPersistence } from './store';
+import { migrateProject } from '../engine/migrate';
+import { ErrorBoundary } from './ErrorBoundary';
 import { NumInput } from './Grid';
 import { SettingsPage } from './pages/Settings';
 import { BasePage } from './pages/Base';
@@ -41,7 +43,8 @@ function ProjectList({ onOpen }: { onOpen: (id: string) => void }) {
   const [name, setName] = useState('');
   const [year, setYear] = useState(new Date().getFullYear() - 1);
   const refresh = () => listProjects().then(setList);
-  useEffect(() => { refresh(); }, []);
+  const [store, setStore] = useState<{ persisted: boolean | null; usage?: number; quota?: number } | null>(null);
+  useEffect(() => { refresh(); requestPersistence().then(setStore); }, []);
   const create = async (p: Project) => { await saveProject(p); onOpen(p.id); };
   const [pending, setPending] = useState<{ name: string; data: any } | null>(null);
   const [pw, setPw] = useState('');
@@ -49,7 +52,7 @@ function ProjectList({ onOpen }: { onOpen: (id: string) => void }) {
   const saveImported = async (p: Project) => {
     if (!p?.id || !p.settings) { setMsg('檔案格式不符'); return; }
     if ((await listProjects()).some((x) => x.id === p.id) && !confirm(`本機已有相同專案「${p.name}」，匯入將覆蓋本機版本。確定？`)) return;
-    await saveProject(p); setMsg(`已匯入「${p.name}」`); refresh();
+    await saveProject(migrateProject(p)); setMsg(`已匯入「${p.name}」`); refresh();
   };
   const importJson = async (f: File) => {
     setMsg('');
@@ -72,6 +75,12 @@ function ProjectList({ onOpen }: { onOpen: (id: string) => void }) {
       <header className="home-head">
         <h1>五年財務預估與銀行報表編修</h1>
         <p className="privacy">🔒 所有財報資料僅儲存在本機瀏覽器（IndexedDB），匯入、計算、匯出皆在本機完成，不傳送至任何雲端或 AI 服務。清除瀏覽器資料會刪除專案，請定期匯出備份。</p>
+        {store && (
+          <p className="muted small">
+            本機儲存：{store.persisted ? '已取得持久儲存（瀏覽器不會自動清除）' : store.persisted === false ? '未取得持久儲存，瀏覽器空間不足時可能清除資料，請務必定期備份' : '此瀏覽器不支援持久儲存設定，請務必定期備份'}
+            {store.usage !== undefined && store.quota ? `；已使用 ${(store.usage / 1048576).toFixed(1)} MB／可用約 ${(store.quota / 1073741824).toFixed(1)} GB` : ''}
+          </p>
+        )}
       </header>
       <section className="card">
         <h2>建立專案</h2>
@@ -119,7 +128,9 @@ function ProjectList({ onOpen }: { onOpen: (id: string) => void }) {
 
 function Workspace({ id, onClose }: { id: string; onClose: () => void }) {
   const [p, setP] = useState<Project | null>(null);
-  const [page, setPage] = useState('overview');
+  const [page, setPage0] = useState('overview');
+  const [navOpen, setNavOpen] = useState(false);
+  const setPage = (x: string) => { setPage0(x); setNavOpen(false); window.scrollTo?.(0, 0); };
   const [tr, setTr] = useState<{ row: string; col: number } | null>(null);
   const [saved, setSaved] = useState(true);
   const timer = useRef<any>(null);
@@ -196,9 +207,12 @@ function Workspace({ id, onClose }: { id: string; onClose: () => void }) {
   return (
     <ProjectCtx.Provider value={ctx}>
       <div className="app">
-        <aside className="nav">
+        <aside className={`nav ${navOpen ? 'open' : ''}`}>
           <div className="brand" onClick={onClose} title="返回專案清單">◀ 專案清單</div>
-          <div className="proj-name">{p.settings.companyName}</div>
+          <div className="nav-top">
+            <div className="proj-name">{p.settings.companyName}</div>
+            <button className="menu-btn" aria-expanded={navOpen} onClick={() => setNavOpen(!navOpen)}>{navOpen ? '✕ 關閉' : `☰ ${PAGES.find((x) => x.key === page)?.label ?? '選單'}`}</button>
+          </div>
           <div className="muted small">基期 {p.settings.baseYear}・預估 {p.settings.years} 年</div>
           <ScenarioSwitcher />
           <nav>
@@ -217,7 +231,7 @@ function Workspace({ id, onClose }: { id: string; onClose: () => void }) {
           <div className="muted small">{saved ? '已儲存於本機' : '儲存中…'}</div>
         </aside>
         <main className="main">
-          <PageComp />
+          <ErrorBoundary key={page} onUndo={() => undoRedo('undo')} onHome={() => setPage('overview')}><PageComp /></ErrorBoundary>
         </main>
         {tr && <TracePanel row={tr.row} col={tr.col} onClose={() => setTr(null)} onNav={(row, col) => setTr({ row, col })} />}
       </div>

@@ -190,6 +190,17 @@ export function inputSanity(g: Graph): Issue[] {
     { test: (id) => ['a:ar_p', 'a:inv_p', 'a:ap_p'].includes(id), check: (v) => (v >= 0 && v <= 730 ? null : '週轉參數為負數或過大，請確認') },
     { test: (id) => /^(f|d):.*:(capex|paid|dcost|dacc|dproc|drecv|imp|cost|acc|resid)$/.test(id) || /^l:.*:(draw|repay)$/.test(id) || ['a:div', 'a:cap_par', 'a:cap_prem'].includes(id), check: (v) => (v >= 0 ? null : '金額不應為負數') },
   ];
+  // 其他科目：方法為成長率或比率，參數卻像金額
+  for (const row of g.rows) {
+    if (!row.id.startsWith('a:op:')) continue;
+    const m = g.byId.get(row.id.replace('a:op:', 'a:om:'));
+    row.cells.forEach((cell, c) => {
+      const method = m?.cells[c]?.value;
+      if (!cell || cell.kind !== 'input' || typeof cell.value !== 'number') return;
+      if ([M.GROWTH, M.PCT_REV, M.PCT_COGS, M.CASH_RATE].includes(method as any) && Math.abs(cell.value) > 10)
+        out.push({ level: 'error', category: '輸入檢查', year: g.columns[c].year, item: row.label, message: `方法為「${method}」，參數應為比率（例 0.05＝5%），目前 ${fmtNum(cell.value)} 看似金額，請確認方法是否選錯`, rowId: row.id, page: 'assumptions' });
+    });
+  }
   for (const row of g.rows) {
     const rule = rules.find((x) => x.test(row.id));
     if (!rule) continue;
