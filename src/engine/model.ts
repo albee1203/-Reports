@@ -16,6 +16,7 @@ export const SH = {
   oth: '其他科目',
   fa: '固定資產',
   fad: '固定資產明細',
+  ratio: '財務比率',
   loan: '借款',
   taxeq: '所得稅及權益',
   is: '綜合損益表',
@@ -575,6 +576,46 @@ export function buildGraph(p: Project, sc: Scenario): { g: Graph; info: ModelInf
   sceRow('sce:t_owner', '與業主之交易（增資、股利）', (c) => add(r('sce:cap_inc', c), r('sce:cs_inc', c), r('sce:adv_chg', c), r('sce:re_div', c)), { indent: 1 });
   if (otherEqAccts.length) sceRow('sce:t_other', '其他權益項目變動', (c) => r('sce:ot_chg', c), { indent: 1 });
   sceRow('sce:t_close', '期末權益', (c) => add(...keys.map((k) => r(`sce:${k}_close`, c))), { baseF: (c) => add(...keys.map((k) => r(`sce:${k}_close`, c))), style: 'total' });
+
+  // ===== 財務比率 =====
+  // 分母為零時顯示「—」；需前一年度之比率僅於有前一年度資料之欄位計算
+  const DASH = s('—');
+  const g_prepay = (c: number) => (rows.some((x) => x.id === 'bs:prepay') ? r('bs:prepay', c) : n(0));
+  const ratio = (a: Expr, b: Expr) => iff(eq(b, n(0)), DASH, div(a, b));
+  const hasPrev = (c: number) => c > 0;
+  const rRow = (id: string, label: string, format: RowFormat, f: (c: number) => Expr | Cell | null, desc: string, opt: { forecastOnly?: boolean; needPrev?: boolean } & Partial<Row> = {}) => {
+    const { forecastOnly, needPrev, ...extra } = opt;
+    const fx: CellFn = (c) => (needPrev && !hasPrev(c) ? NA('無前期資料') : f(c));
+    return frow(SH.ratio, id, label, format, fx, { base: forecastOnly ? () => NA('—') : fx, comp: forecastOnly ? () => NA('—') : fx, desc, ...extra });
+  };
+  const hdr = (id: string, label: string) => addRow(SH.ratio, id, label, 'text', Array(ncol).fill(null), { style: 'header' });
+  const days = P('p:days');
+  // 折舊：預估取排程；基期取現金流量表實際數（未提供時不計算 EBITDA）
+  const depAvail = (c: number) => isF(c) || (c === cb && p.base.cfActual['cf:dep'] !== undefined && p.base.cfActual['cf:dep'] !== null);
+  const depOf = (c: number) => (isF(c) ? r('f:dep', c) : r('cf:dep', c));
+  hdr('r:h_grow', '成長與獲利能力');
+  rRow('r:rev_g', '營收成長率', 'pct', (c) => ratio(sub(r('is:rev', c), r('is:rev', c - 1)), r('is:rev', c - 1)), '（本期營收−前期營收）÷前期營收', { needPrev: true, indent: 1 });
+  rRow('r:gm', '毛利率', 'pct', (c) => ratio(r('is:gp', c), r('is:rev', c)), '營業毛利÷營業收入', { indent: 1 });
+  rRow('r:opm', '營業利益率', 'pct', (c) => ratio(r('is:opinc', c), r('is:rev', c)), '營業利益÷營業收入', { indent: 1 });
+  rRow('r:npm', '稅後淨利率', 'pct', (c) => ratio(r('is:ni', c), r('is:rev', c)), '本期淨利÷營業收入', { indent: 1 });
+  rRow('r:ebitda', 'EBITDA', 'amount', (c) => (depAvail(c) ? add(r('is:pbt', c), r('is:fin', c), depOf(c)) : NA('需基期折舊')), '稅前淨利＋財務成本＋折舊', { indent: 1 });
+  rRow('r:roe', '權益報酬率（ROE）', 'pct', (c) => ratio(r('is:ni', c), div(add(r('bs:equity', c), r('bs:equity', c - 1)), n(2))), '本期淨利÷平均權益', { needPrev: true, indent: 1 });
+  rRow('r:roa', '資產報酬率（ROA）', 'pct', (c) => ratio(r('is:ni', c), div(add(r('bs:assets', c), r('bs:assets', c - 1)), n(2))), '本期淨利÷平均資產（未加回利息）', { needPrev: true, indent: 1 });
+  hdr('r:h_liq', '流動性');
+  rRow('r:cur', '流動比率', 'pct', (c) => ratio(r('bs:t_CA', c), r('bs:t_CL', c)), '流動資產÷流動負債', { indent: 1 });
+  rRow('r:quick', '速動比率', 'pct', (c) => ratio(sub(sub(r('bs:t_CA', c), r('bs:inventory', c)), g_prepay(c)), r('bs:t_CL', c)), '（流動資產−存貨−預付款項）÷流動負債', { indent: 1 });
+  rRow('r:ar_days', '應收帳款週轉天數', 'days', (c) => ratio(mul(r('bs:ar', c), days), r('is:rev', c)), '期末應收帳款÷營業收入×天數', { indent: 1 });
+  rRow('r:inv_days', '存貨週轉天數', 'days', (c) => ratio(mul(r('bs:inventory', c), days), r('is:cogs', c)), '期末存貨÷營業成本×天數', { indent: 1 });
+  rRow('r:ap_days', '應付帳款週轉天數', 'days', (c) => ratio(mul(r('bs:ap', c), days), r('is:cogs', c)), '期末應付帳款÷營業成本×天數', { indent: 1 });
+  hdr('r:h_lev', '財務結構與償債能力');
+  rRow('r:debt', '負債比率', 'pct', (c) => ratio(r('bs:liab', c), r('bs:assets', c)), '負債總計÷資產總計', { indent: 1 });
+  rRow('r:de', '負債對權益比率', 'pct', (c) => ratio(r('bs:liab', c), r('bs:equity', c)), '負債總計÷權益總計', { indent: 1 });
+  rRow('r:loans', '有息負債（借款）', 'amount', (c) => add(r('bs:st_loan', c), r('bs:ltd_cur', c), r('bs:ltd', c)), '短期借款＋一年內到期長期借款＋長期借款', { indent: 1 });
+  rRow('r:netdebt', '淨借款', 'amount', (c) => sub(r('r:loans', c), r('bs:cash', c)), '有息負債−現金及約當現金', { indent: 1 });
+  rRow('r:icr', '利息保障倍數', 'times', (c) => ratio(add(r('is:pbt', c), r('is:fin', c)), r('is:fin', c)), '（稅前淨利＋財務成本）÷財務成本', { indent: 1 });
+  rRow('r:debt_ebitda', '有息負債÷EBITDA', 'times', (c) => (depAvail(c) ? ratio(r('r:loans', c), r('r:ebitda', c)) : NA('需基期折舊')), '有息負債÷EBITDA', { indent: 1 });
+  rRow('r:dscr', '償債保障比率（DSCR）', 'times', (c) => ratio(sub(r('r:ebitda', c), r('t:paid', c)), add(r('l:repay', c), r('l:ipaid', c))), '（EBITDA−支付所得稅）÷（償還借款＋支付利息）；僅預估年度', { forecastOnly: true, indent: 1 });
+  rRow('r:cfo_cov', '營業現金流量÷流動負債', 'pct', (c) => ratio(r('cf:op', c), r('bs:t_CL', c)), '營業活動淨現金流量÷流動負債；僅預估年度', { forecastOnly: true, indent: 1 });
 
   // ===== 勾稽檢查 =====
   const ckAll = (id: string, label: string, f: (c: number) => Expr, baseF?: (c: number) => Expr, desc?: string) => {

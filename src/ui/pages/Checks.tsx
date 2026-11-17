@@ -4,6 +4,7 @@ import { Grid } from '../Grid';
 import { SH, buildGraph } from '../../engine/model';
 import { evaluate } from '../../engine/graph';
 import { cashAlerts, Issue } from '../../engine/checks';
+import { LineChart, Legend } from '../Charts';
 
 const LEVEL: Record<string, string> = { error: '勾稽差異', incomplete: '未完成', warning: '待確認', info: '提示' };
 
@@ -87,6 +88,17 @@ export function ComparePage() {
     <div>
       <h1>情境比較（{unitLabel(u)}）</h1>
       <ScenPick sel={sel} setSel={setSel} />
+      <section className="card">
+        <Legend names={data.map((d) => d.sc.name)} />
+        <div className="charts">
+          {[0, 1, 2, 3].map((mi) => (
+            <LineChart key={mi} title={data[0].metrics[mi][0]} years={years}
+              series={data.map((d) => ({ name: d.sc.name, values: d.metrics[mi][1] }))}
+              refLine={mi === 2 ? { value: p.settings.cashThreshold, label: '現金警示門檻' } : undefined} />
+          ))}
+        </div>
+        <p className="hint">滑鼠移至圖上可檢視各年度數值；完整數字見下表。最多 8 個情境以固定顏色區分。</p>
+      </section>
       <table className="grid stmt">
         <thead><tr><th>指標</th><th>情境</th>{years.map((y) => <th key={y} className="forecast">{y}</th>)}</tr></thead>
         <tbody>

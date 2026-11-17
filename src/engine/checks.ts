@@ -7,7 +7,7 @@ import { findAccount } from './coa';
 export type IssueLevel = 'error' | 'incomplete' | 'warning' | 'info';
 export interface Issue {
   level: IssueLevel;
-  category: '勾稽' | '未完成' | '匯入' | '假設' | '異常餘額' | '現金警示' | '概估' | '銀行送件' | '進階項目';
+  category: '勾稽' | '輸入檢查' | '未完成' | '匯入' | '假設' | '異常餘額' | '現金警示' | '概估' | '銀行送件' | '進階項目';
   year?: number;
   item: string;
   message: string;
@@ -89,6 +89,9 @@ export function collectIssues(p: Project, sc: Scenario, g: Graph, ev: EvalResult
     });
   }
 
+  // --- 輸入合理性檢查 ---
+  out.push(...inputSanity(g));
+
   // --- 預設方法待確認 ---
   for (const [code, o] of Object.entries(sc.a.others)) {
     const a = findAccount(code, p.customAccounts);
@@ -157,4 +160,32 @@ export function reportStatus(issues: Issue[], _mode: 'internal' | 'bank'): '草�
   if (issues.some((i) => i.level === 'error' || i.level === 'incomplete')) return '草稿';
   if (issues.some((i) => i.level === 'warning')) return '待確認';
   return '已完成檢查';
+}
+
+// 輸入值範圍檢查：月份必須為 1–12 之整數；其他超出常見範圍者提示確認
+export function inputSanity(g: Graph): Issue[] {
+  const out: Issue[] = [];
+  const rules: { test: (id: string) => boolean; check: (v: number) => string | null; level?: IssueLevel }[] = [
+    { test: (id) => g.byId.get(id)?.format === 'month' && !/:acm$/.test(id), check: (v) => (Number.isInteger(v) && v >= 1 && v <= 12 ? null : '月份須為 1 至 12 之整數'), level: 'error' },
+    { test: (id) => /:acm$/.test(id), check: (v) => (v >= 0 && v <= 12 ? null : '年末應付利息月數須介於 0 至 12'), level: 'error' },
+    { test: (id) => id === 'a:gm', check: (v) => (v > 0 && v < 1 ? null : '毛利率通常介於 0% 至 100%') },
+    { test: (id) => id === 'a:growth', check: (v) => (v >= -0.5 && v <= 1 ? null : '成長率超過 ±50%／100%，請確認') },
+    { test: (id) => id.startsWith('a:opex:'), check: (v) => (v >= 0 && v <= 0.5 ? null : '費用率為負數或超過 50%，請確認') },
+    { test: (id) => ['a:depShare', 'a:div_pct', 'a:tax_prov'].includes(id) || /:res$/.test(id), check: (v) => (v >= 0 && v <= 1 ? null : '比例須介於 0% 至 100%'), level: 'error' },
+    { test: (id) => id === 'a:tax_rate', check: (v) => (v >= 0 && v <= 0.5 ? null : '稅率為負數或超過 50%，請確認') },
+    { test: (id) => /^l:.*:rate$/.test(id), check: (v) => (v >= 0 && v <= 0.2 ? null : '利率為負數或超過 20%，請確認') },
+    { test: (id) => g.byId.get(id)?.format === 'years', check: (v) => (v > 0 && v <= 60 ? null : '年限須大於 0（通常不超過 60 年）') },
+    { test: (id) => ['a:ar_p', 'a:inv_p', 'a:ap_p'].includes(id), check: (v) => (v >= 0 && v <= 730 ? null : '週轉參數為負數或過大，請確認') },
+    { test: (id) => /^(f|d):.*:(capex|paid|dcost|dacc|dproc|drecv|imp|cost|acc|resid)$/.test(id) || /^l:.*:(draw|repay)$/.test(id) || ['a:div', 'a:cap_par', 'a:cap_prem'].includes(id), check: (v) => (v >= 0 ? null : '金額不應為負數') },
+  ];
+  for (const row of g.rows) {
+    const rule = rules.find((x) => x.test(row.id));
+    if (!rule) continue;
+    row.cells.forEach((cell, c) => {
+      if (!cell || cell.kind !== 'input' || typeof cell.value !== 'number') return;
+      const msg = rule.check(cell.value);
+      if (msg) out.push({ level: rule.level ?? 'warning', category: '輸入檢查', year: g.columns[c].type === 'forecast' ? g.columns[c].year : undefined, item: row.label, message: `${msg}（目前：${+cell.value.toFixed(6)}）`, rowId: row.id, page: row.sheet === '固定資產' || row.sheet === '固定資產明細' ? 'fixed' : row.sheet === '借款' ? 'loans' : 'assumptions' });
+    });
+  }
+  return out;
 }

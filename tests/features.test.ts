@@ -50,3 +50,21 @@ describe('fixed asset detail', () => {
     expect(pasteValue('abc', 'amount')).toBeUndefined();
   });
 });
+
+import { inputSanity } from '../src/engine/checks';
+describe('input sanity', () => {
+  it('flags out-of-range inputs', () => {
+    const { p } = detailProject();
+    const sc = p.scenarios[0];
+    sc.a.gm[0] = 1.2;
+    sc.fa.machinery.month[0] = 13;
+    sc.loans[0].rate[1] = -0.01;
+    const { g } = buildGraph(p, sc);
+    const xs = inputSanity(g);
+    expect(xs.some((x) => x.item === '毛利率' && x.year === 2026)).toBe(true);
+    expect(xs.some((x) => x.level === 'error' && x.message.startsWith('月份'))).toBe(true);
+    expect(xs.some((x) => x.message.startsWith('利率') && x.year === 2027)).toBe(true);
+    const clean = inputSanity(buildGraph(sampleProject(), sampleProject().scenarios[0]).g);
+    expect(clean).toEqual([]);
+  });
+});

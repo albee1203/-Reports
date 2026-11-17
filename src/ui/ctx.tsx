@@ -36,6 +36,7 @@ export function fmtVal(v: Value, format: RowFormat, unit: 'yuan' | 'thousand'): 
     case 'pct': return `${(v * 100).toFixed(2)}%`;
     case 'ratio': return Math.abs(v) >= 1000 ? Math.round(v).toLocaleString('zh-TW') : String(+v.toFixed(4));
     case 'days': case 'month': case 'years': return String(+v.toFixed(2));
+    case 'times': return `${v.toFixed(2)} 倍`;
     default: return String(v);
   }
 }

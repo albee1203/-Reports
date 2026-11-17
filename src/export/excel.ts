@@ -53,7 +53,7 @@ export async function buildWorkbook(o: ExportOptions): Promise<ExcelJS.Workbook>
   const amtFmt = amountFormat(st.unit);
 
   // 列位置
-  const sheetsOrder = [SH.cover, SH.assump, SH.base, SH.raw, SH.rev, SH.wc, SH.oth, SH.fa, ...(o.project.faAssets?.length ? [SH.fad] : []), SH.loan, SH.taxeq, SH.is, SH.bs, SH.sce, SH.cf, SH.ck, ...(mode === 'bank' ? [SH.notes] : [])];
+  const sheetsOrder = [SH.cover, SH.assump, SH.base, SH.raw, SH.rev, SH.wc, SH.oth, SH.fa, ...(o.project.faAssets?.length ? [SH.fad] : []), SH.loan, SH.taxeq, SH.is, SH.bs, SH.sce, SH.cf, SH.ratio, SH.ck, ...(mode === 'bank' ? [SH.notes] : [])];
   const pos = new Map<string, { sheet: string; row: number }>();
   const rowsBySheet = new Map<string, Row[]>();
   for (const r of g.rows) {
@@ -88,7 +88,7 @@ export async function buildWorkbook(o: ExportOptions): Promise<ExcelJS.Workbook>
     g.columns.forEach((col, ci) => {
       const wc = ws.getColumn(FIRST_DATA_COL + ci);
       wc.width = 16;
-      if (col.type === 'comparative' && !isStmt && name !== SH.base && name !== SH.ck) wc.hidden = true;
+      if (col.type === 'comparative' && !isStmt && name !== SH.base && name !== SH.ck && name !== SH.ratio) wc.hidden = true;
     });
     // 表頭
     ws.getCell('A1').value = st.companyName;
@@ -119,7 +119,7 @@ export async function buildWorkbook(o: ExportOptions): Promise<ExcelJS.Workbook>
       if (r.style === 'header') xr.getCell(1).font = { bold: true };
       if (r.style === 'subtotal' || r.style === 'total') xr.font = { bold: true };
       if (r.hidden && name === SH.base) xr.hidden = true;
-      const numFmt = r.format === 'amount' ? amtFmt : r.format === 'pct' ? '0.00%' : r.format === 'ratio' ? '#,##0.####' : r.format === 'days' || r.format === 'month' || r.format === 'years' ? '0' : undefined;
+      const numFmt = r.format === 'amount' ? amtFmt : r.format === 'pct' ? '0.00%' : r.format === 'ratio' ? '#,##0.####' : r.format === 'times' ? '0.00"倍"' : r.format === 'days' || r.format === 'month' || r.format === 'years' ? '0' : undefined;
       r.cells.forEach((cell, ci) => {
         if (!cell) return;
         const xc = xr.getCell(FIRST_DATA_COL + ci);
@@ -127,7 +127,7 @@ export async function buildWorkbook(o: ExportOptions): Promise<ExcelJS.Workbook>
         const cached = ev.value(r.id, ci);
         switch (cell.kind) {
           case 'na':
-            if (isStmt || name === SH.base) { xc.value = cell.note ?? '未提供'; xc.alignment = { horizontal: 'right' }; xc.font = { italic: true, color: { argb: 'FF808080' } }; }
+            if (isStmt || name === SH.base || name === SH.ratio) { xc.value = cell.note ?? '未提供'; xc.alignment = { horizontal: 'right' }; xc.font = { italic: true, color: { argb: 'FF808080' } }; }
             break;
           case 'actual':
             xc.value = cell.value as any;

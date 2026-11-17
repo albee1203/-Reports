@@ -14,8 +14,10 @@ import { StatementsPage } from './pages/Statements';
 import { ChecksPage, ComparePage } from './pages/Checks';
 import { BankPage } from './pages/Bank';
 import { ExportPage, VersionsPage } from './pages/Export';
+import { OverviewPage } from './pages/Overview';
 
 const PAGES: { key: string; label: string; step?: number }[] = [
+  { key: 'overview', label: '進度總覽' },
   { key: 'settings', label: '專案設定', step: 1 },
   { key: 'base', label: '基期資料與科目對應', step: 2 },
   { key: 'assumptions', label: '逐年假設', step: 3 },
@@ -89,7 +91,7 @@ function ProjectList({ onOpen }: { onOpen: (id: string) => void }) {
 
 function Workspace({ id, onClose }: { id: string; onClose: () => void }) {
   const [p, setP] = useState<Project | null>(null);
-  const [page, setPage] = useState('settings');
+  const [page, setPage] = useState('overview');
   const [tr, setTr] = useState<{ row: string; col: number } | null>(null);
   const [saved, setSaved] = useState(true);
   const timer = useRef<any>(null);
@@ -162,7 +164,7 @@ function Workspace({ id, onClose }: { id: string; onClose: () => void }) {
   const ctx: Ctx = { p, ...model, update, go: setPage, trace: (row, col) => setTr({ row, col }) };
   const status = reportStatus(model.issues, 'internal');
   const counts = { error: model.issues.filter((i: any) => i.level === 'error').length, incomplete: model.issues.filter((i: any) => i.level === 'incomplete').length };
-  const PageComp = { settings: SettingsPage, base: BasePage, assumptions: AssumptionsPage, fixed: FixedAssetsPage, loans: LoansPage, statements: StatementsPage, checks: ChecksPage, compare: ComparePage, bank: BankPage, export: ExportPage, versions: VersionsPage }[page] ?? SettingsPage;
+  const PageComp = { overview: OverviewPage, settings: SettingsPage, base: BasePage, assumptions: AssumptionsPage, fixed: FixedAssetsPage, loans: LoansPage, statements: StatementsPage, checks: ChecksPage, compare: ComparePage, bank: BankPage, export: ExportPage, versions: VersionsPage }[page] ?? SettingsPage;
   return (
     <ProjectCtx.Provider value={ctx}>
       <div className="app">
@@ -179,7 +181,7 @@ function Workspace({ id, onClose }: { id: string; onClose: () => void }) {
               </a>
             ))}
           </nav>
-          <div className={`status st-${status}`}>報表狀態：{status}</div>
+          <div className={`status st-${status}`}>內部版狀態：{status}</div>
           <div className="row undo">
             <button className="mini" disabled={!hist.current.past.length} onClick={() => undoRedo('undo')} title="Ctrl+Z">↶ 復原</button>
             <button className="mini" disabled={!hist.current.future.length} onClick={() => undoRedo('redo')} title="Ctrl+Y">↷ 重做</button>

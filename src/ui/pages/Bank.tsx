@@ -46,6 +46,7 @@ export function BankPage() {
       <section className="card">
         <h2>列印／PDF</h2>
         <p className="muted small">A4，依報表寬度自動選擇直式或橫式；含負責人及財務主管空白簽章欄，不含頁碼。於瀏覽器列印對話框選擇「另存為 PDF」，並取消勾選「頁首及頁尾」。勾稽檢查不列入列印版面。</p>
+        <label className="check"><input type="checkbox" checked={!!b.includeRatios} onChange={(e) => update((np) => { np.bank.includeRatios = e.target.checked; }, { action: '銀行版設定', detail: `列印附財務比率：${e.target.checked}` })} />列印時附「財務比率」頁</label>
         <button className="primary" onClick={() => setPreview(true)}>預覽列印版面</button>
       </section>
       {preview && <PrintView onClose={() => setPreview(false)} />}
@@ -120,7 +121,7 @@ export function PrintView({ onClose }: { onClose: () => void }) {
         <span className="muted small">列印時請選擇 A4、取消「頁首及頁尾」。</span>
       </div>
       <div className="print-root" ref={root}>
-        {STATEMENT_SHEETS.map((sheet) => {
+        {[...STATEMENT_SHEETS, ...(b.includeRatios ? [SH.ratio] : [])].map((sheet) => {
           const rows = g.rows.filter((r) => r.sheet === sheet && !isZeroRow(r, ev, g.columns.length));
           return (
             <section key={sheet} className="page portrait"><div className="page-inner">

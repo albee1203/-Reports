@@ -23,7 +23,7 @@ export interface Cell {
   inputPath?: string; // 對應專案資料路徑（UI 編輯用）
 }
 
-export type RowFormat = 'amount' | 'pct' | 'days' | 'month' | 'years' | 'text' | 'ratio' | 'status';
+export type RowFormat = 'amount' | 'pct' | 'days' | 'month' | 'years' | 'text' | 'ratio' | 'status' | 'times';
 
 export interface Row {
   id: string;

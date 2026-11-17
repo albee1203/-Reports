@@ -144,6 +144,7 @@ export interface BankSettings {
   notes: NoteSection[];
   acks: Record<string, boolean>;
   reviewer: string;
+  includeRatios?: boolean; // 銀行版列印附財務比率
 }
 
 export interface LogEntry { at: string; scenario?: string; action: string; detail: string }
