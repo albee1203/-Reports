@@ -218,3 +218,21 @@ table.grid td.lbl, table.grid th.lbl { position: sticky; left: 0; z-index: 2; ba
 table.grid tr.header td.lbl { background: #f4f6f9; }
 table.grid th.lbl { z-index: 3; background: #f7f8fa; }
 table.grid td.in:focus-within { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* 電腦版：快速鍵提示、可調寬度之追溯面板、即時摘要 */
+.nav nav a kbd { margin-left: auto; font-family: inherit; font-size: 10px; opacity: .55; border: 1px solid rgba(255,255,255,.3); border-radius: 3px; padding: 0 4px; }
+.nav nav a .badge + kbd { margin-left: 4px; }
+.trace { position: sticky; }
+.resize-handle { position: absolute; left: -3px; top: 0; bottom: 0; width: 6px; cursor: col-resize; z-index: 5; }
+.resize-handle:hover { background: rgba(47,111,214,.25); }
+.live { width: 470px; background: #fff; border-left: 1px solid var(--line); padding: 14px; position: sticky; top: 0; height: 100vh; overflow: auto; }
+table.grid.live-t td.v { min-width: 0; font-size: 12px; padding: 3px 5px; }
+table.grid.live-t td.lbl, table.grid.live-t th.lbl { min-width: 0; white-space: nowrap; }
+table.grid.live-t th { font-size: 12px; padding: 3px 5px; }
+.live-t td.v.ok { color: var(--ok); text-align: center; }
+.live-t td.v.neg { color: var(--err); }
+.live-t td.flash { animation: flash 1.6s ease-out; }
+@keyframes flash { from { background: #ffe58a; } to { background: transparent; } }
+.live-open { float: right; }
+@media (min-width: 901px) { .app { grid-template-columns: 230px minmax(0, 1fr) auto auto; } }
+@media (max-width: 1400px) { .live, .live-open { display: none; } }

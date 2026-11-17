@@ -17,18 +17,23 @@ import { ChecksPage, ComparePage } from './pages/Checks';
 import { BankPage } from './pages/Bank';
 import { ExportPage, VersionsPage } from './pages/Export';
 import { OverviewPage } from './pages/Overview';
+import { LiveSummary, LIVE_PAGES } from './LiveSummary';
 
-const PAGES: { key: string; label: string; step?: number }[] = [
-  { key: 'overview', label: '進度總覽' },
-  { key: 'settings', label: '專案設定', step: 1 },
-  { key: 'base', label: '基期資料與科目對應', step: 2 },
-  { key: 'assumptions', label: '逐年假設', step: 3 },
-  { key: 'fixed', label: '固定資產', step: 3 },
-  { key: 'loans', label: '融資（借款）', step: 3 },
-  { key: 'statements', label: '四大報表', step: 4 },
-  { key: 'checks', label: '勾稽與現金警示', step: 4 },
-  { key: 'compare', label: '情境比較', step: 4 },
-  { key: 'bank', label: '銀行版編修', step: 5 },
+// 個人介面偏好（僅存於此瀏覽器；無法使用時採預設值）
+const pref = (k: string, d: string) => { try { return localStorage.getItem(`pref:${k}`) ?? d; } catch { return d; } };
+const savePref = (k: string, v: string) => { try { localStorage.setItem(`pref:${k}`, v); } catch { /* 忽略 */ } };
+
+const PAGES: { key: string; label: string; step?: number; hot?: string }[] = [
+  { key: 'overview', label: '進度總覽' , hot: '0' },
+  { key: 'settings', label: '專案設定', step: 1 , hot: '1' },
+  { key: 'base', label: '基期資料與科目對應', step: 2 , hot: '2' },
+  { key: 'assumptions', label: '逐年假設', step: 3 , hot: '3' },
+  { key: 'fixed', label: '固定資產', step: 3 , hot: '4' },
+  { key: 'loans', label: '融資（借款）', step: 3 , hot: '5' },
+  { key: 'statements', label: '四大報表', step: 4 , hot: '6' },
+  { key: 'checks', label: '勾稽與現金警示', step: 4 , hot: '7' },
+  { key: 'compare', label: '情境比較', step: 4 , hot: '8' },
+  { key: 'bank', label: '銀行版編修', step: 5 , hot: '9' },
   { key: 'export', label: '匯出', step: 5 },
   { key: 'versions', label: '版本與修改紀錄' },
 ];
@@ -130,6 +135,8 @@ function Workspace({ id, onClose }: { id: string; onClose: () => void }) {
   const [p, setP] = useState<Project | null>(null);
   const [page, setPage0] = useState('overview');
   const [navOpen, setNavOpen] = useState(false);
+  const [liveOn, setLiveOn0] = useState(() => pref('liveSummary', '1') === '1');
+  const setLiveOn = (v: boolean) => { setLiveOn0(v); savePref('liveSummary', v ? '1' : '0'); };
   const setPage = (x: string) => { setPage0(x); setNavOpen(false); window.scrollTo?.(0, 0); };
   const [tr, setTr] = useState<{ row: string; col: number } | null>(null);
   const [saved, setSaved] = useState(true);
@@ -156,6 +163,11 @@ function Workspace({ id, onClose }: { id: string; onClose: () => void }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement;
+      // Alt＋數字：切換頁面（輸入中亦可使用）
+      if (e.altKey && !e.ctrlKey && !e.metaKey && /^Digit\d$/.test(e.code)) {
+        const pg = PAGES.find((x) => x.hot === e.code.slice(5));
+        if (pg) { e.preventDefault(); setPage0(pg.key); setNavOpen(false); return; }
+      }
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)) return; // 保留輸入框內建之復原
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undoRedo(e.shiftKey ? 'redo' : 'undo'); }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); undoRedo('redo'); }
@@ -218,7 +230,7 @@ function Workspace({ id, onClose }: { id: string; onClose: () => void }) {
           <nav>
             {PAGES.map((x) => (
               <a key={x.key} className={page === x.key ? 'active' : ''} onClick={() => setPage(x.key)}>
-                {x.step && <span className="step">{x.step}</span>}{x.label}
+                {x.step && <span className="step">{x.step}</span>}{x.label}{x.hot && <kbd title={`快速鍵：Alt＋${x.hot}`}>Alt+{x.hot}</kbd>}
                 {x.key === 'checks' && (counts.error + counts.incomplete > 0) && <span className="badge">{counts.error + counts.incomplete}</span>}
               </a>
             ))}
@@ -231,8 +243,10 @@ function Workspace({ id, onClose }: { id: string; onClose: () => void }) {
           <div className="muted small">{saved ? '已儲存於本機' : '儲存中…'}</div>
         </aside>
         <main className="main">
+          {LIVE_PAGES.includes(page) && !liveOn && <button className="mini live-open" onClick={() => setLiveOn(true)}>顯示即時摘要</button>}
           <ErrorBoundary key={page} onUndo={() => undoRedo('undo')} onHome={() => setPage('overview')}><PageComp /></ErrorBoundary>
         </main>
+        {LIVE_PAGES.includes(page) && liveOn && <LiveSummary onClose={() => setLiveOn(false)} />}
         {tr && <TracePanel row={tr.row} col={tr.col} onClose={() => setTr(null)} onNav={(row, col) => setTr({ row, col })} />}
       </div>
     </ProjectCtx.Provider>
@@ -254,6 +268,8 @@ function ScenarioSwitcher() {
 
 function TracePanel({ row, col, onClose, onNav }: { row: string; col: number; onClose: () => void; onNav: (r: string, c: number) => void }) {
   const { g, ev, p, sc, update } = useP();
+  const [width, setWidth0] = useState(() => Number(pref('traceWidth', '360')) || 360);
+  const setWidth = (w: number) => { setWidth0(w); savePref('traceWidth', String(Math.round(w))); };
   const t = traceInfo(g, ev, row, col);
   if (!t) return null;
   const unit = p.settings.unit;
@@ -267,7 +283,13 @@ function TracePanel({ row, col, onClose, onNav }: { row: string; col: number; on
     if (v === null) delete s.overrides[row][fIndex]; else s.overrides[row][fIndex] = v;
   }, { action: v === null ? '恢復公式' : '手動覆寫', detail: `${t.row.label}［${colInfo.label}］${v === null ? '' : `：公式值 ${fmtVal(t.value, t.row.format, 'yuan')} → ${v}`}` });
   return (
-    <aside className="trace">
+    <aside className="trace" style={{ width }}>
+      <div className="resize-handle" title="拖拉調整寬度" onMouseDown={(e) => {
+        e.preventDefault();
+        const move = (ev: MouseEvent) => setWidth(Math.min(900, Math.max(280, window.innerWidth - ev.clientX)));
+        const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); };
+        window.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
+      }} />
       <div className="trace-head"><b>公式追溯</b><button className="mini" onClick={onClose}>✕</button></div>
       <div className="trace-title">{t.row.sheet}／{t.row.label}［{colInfo.label}｜{colInfo.type === 'forecast' ? '預估' : '實際'}］</div>
       <div className={`kind k-${g.byId.get(row)!.cells[col]?.kind}`}>{t.kindLabel}</div>
