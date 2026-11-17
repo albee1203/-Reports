@@ -54,7 +54,7 @@ export function parseAmount(raw: string): { value: number | null; error?: string
   s = s.replace(/[０-９]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 0xfee0)).replace(/，/g, ',').replace(/．/g, '.').replace(/[＄$元NT\s　]/gi, '');
   let neg = false;
   if (/^\(.*\)$/.test(s) || /^（.*）$/.test(s)) { neg = true; s = s.slice(1, -1); }
-  if (/^[△▲-－]/.test(s)) { neg = !neg; s = s.slice(1); }
+  if (/^[△▲\-－−]/.test(s)) { neg = !neg; s = s.slice(1); } // 「-」須跳脫，否則成為字元範圍
   if (/-$/.test(s)) { neg = !neg; s = s.slice(0, -1); }
   s = s.replace(/,/g, '');
   if (!/^\d+(\.\d+)?$/.test(s)) return { value: null, error: `金額格式錯誤：「${raw}」` };

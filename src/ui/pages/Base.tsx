@@ -4,6 +4,8 @@ import { NumInput } from '../Grid';
 import { allAccounts, SECTION_NAMES, Section, AccountDef, CfClass } from '../../engine/coa';
 import { readFile, SheetData, guessLayout, buildLines, newRawImport, applyImport, remapLine, reconcileSubtotals, MapConfig, parseAmount } from '../../engine/importer';
 import { matchCfRow, CF_TOTAL_ROWS } from '../../engine/cfImport';
+import { parseSce, findHeaderRow, sceTotals, COMP_LABEL, Comp, Move, TEMPLATE_ROWS, TEMPLATE_COLS } from '../../engine/sceImport';
+import { download } from '../store';
 import { Project, YearData, emptyYear, yearAmount, recomputeYearAccounts, uid } from '../../engine/project';
 import { SH } from '../../engine/model';
 
@@ -258,6 +260,7 @@ function BaseExtraStatements() {
       <h2>基期現金流量表／權益變動表實際數（選填）</h2>
       <p className="muted small">只提供損益表及資產負債表時，基期現金流量表與權益變動表顯示「未提供」；可於取得實際報表後補入。期末數依基期資產負債表自動帶入。可自 Excel 複製一欄數字貼到第一格，依序填入下方各列。流出請以負數或括號表示。</p>
       <CfImport />
+      <SceImport />
       <div className="two-col">
         {block(SH.cf, 'cfActual', '現金流量表')}
         {block(SH.sce, 'sceActual', '權益變動表')}
@@ -325,6 +328,111 @@ function CfImport() {
           {recon.map((x) => <p key={x.t} className={Math.abs(x.total - x.detail) >= 1 ? 'warn' : 'ok'}>{cfRows.find((r) => r.id === x.t)?.label}：原表 {fmtVal(x.total, 'amount', 'yuan')}，明細合計 {fmtVal(x.detail, 'amount', 'yuan')}{Math.abs(x.total - x.detail) >= 1 ? `，差額 ${fmtVal(x.total - x.detail, 'amount', 'yuan')}（請檢查略過之科目）` : ' ✓'}</p>)}
           {errors.map((x, i) => <p key={i} className="warn">⚠ {x}</p>)}
           <button className="primary" disabled={!Object.keys(sums).length} onClick={() => { if (!Object.keys(p.base.cfActual).length || confirm('將取代目前之基期現金流量表實際數，確定？')) { apply(); setFile(null); } }}>套用（取代目前基期現金流量表）</button> <button onClick={() => setFile(null)}>取消</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const MOVE_LABEL: Record<Move, string> = { open: '期初餘額', inc: '現金增資', ni: '本期淨利', oci: '其他綜合損益', div: '現金股利', approp: '盈餘公積提列（保留盈餘內部移轉）', oth: '其他變動', close: '期末餘額（核對用）', skip: '小計（略過）' };
+
+function SceImport() {
+  const { g, ev, info, p, update } = useP();
+  const [file, setFile] = useState<{ name: string; sheets: SheetData[] } | null>(null);
+  const [si, setSi] = useState(0);
+  const [hdr, setHdr] = useState(0);
+  const [labelCol, setLabelCol] = useState(0);
+  const [unit, setUnit] = useState(1);
+  const [colOv, setColOv] = useState<Record<number, Comp | null>>({});
+  const [rowOv, setRowOv] = useState<Record<number, Move | null>>({});
+  const keys = ['cap', 'cs', 'adv', 're', 'oe', 'ot'].filter((k) => g.byId.has(`sce:${k}_open`));
+  const sheet = file?.sheets[si];
+  const init = (sh: SheetData) => { setHdr(findHeaderRow(sh.rows)); setLabelCol(0); setColOv({}); setRowOv({}); };
+  const onFile = async (f: File) => { const sheets = await readFile(f.name, await f.arrayBuffer()); setFile({ name: f.name, sheets }); setSi(0); init(sheets[0]); };
+  const res = sheet ? parseSce(sheet.rows, hdr, labelCol, unit, colOv, rowOv) : null;
+  const unsupported = res ? Object.keys(res.values).filter((id) => !g.byId.has(id)) : [];
+  const bsClose = (k: string) => ev.num(`sce:${k}_close`, info.cb);
+  const recon = res ? keys.map((k) => {
+    const moves = Object.entries(res.values).filter(([id]) => id.startsWith(`sce:${k}_`)).reduce((t, [, v]) => t + v, 0);
+    return { k, calc: moves, bs: bsClose(k), file: res.close[k as Comp] };
+  }) : [];
+  const templ = async () => {
+    const ExcelJS = (await import('exceljs')).default;
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('權益變動表');
+    ws.getCell('A1').value = `${p.settings.companyName}　權益變動表`;
+    ws.getCell('A2').value = `${p.settings.baseYear} 年度　單位：新台幣元（減項請以負數或括號表示）`;
+    ws.getRow(4).values = ['項目', ...TEMPLATE_COLS.map((c) => c[0])];
+    ws.getRow(4).font = { bold: true };
+    TEMPLATE_ROWS.forEach(([label], i) => {
+      const rn = 5 + i;
+      ws.getCell(rn, 1).value = label;
+      const last = 1 + TEMPLATE_COLS.length;
+      ws.getCell(rn, last).value = { formula: `SUM(B${rn}:${String.fromCharCode(64 + last - 1)}${rn})` } as any;
+    });
+    // 期末餘額依基期資產負債表預填（保留盈餘填入未分配盈餘欄，請依實際拆分）
+    const closeRow = 5 + TEMPLATE_ROWS.findIndex((r) => r[1] === 'close');
+    TEMPLATE_COLS.forEach(([name, c], i) => {
+      if (c === 'total' || name === '法定盈餘公積' || name === '特別盈餘公積') return;
+      if (!g.byId.has(`sce:${c}_close`)) return;
+      ws.getCell(closeRow, 2 + i).value = Math.round(bsClose(c));
+    });
+    ws.getColumn(1).width = 24;
+    for (let i = 2; i <= 1 + TEMPLATE_COLS.length; i++) { ws.getColumn(i).width = 16; ws.getColumn(i).numFmt = '#,##0;(#,##0);"-"'; }
+    ws.getCell(`A${6 + TEMPLATE_ROWS.length}`).value = '說明：期末餘額已依基期資產負債表預填（保留盈餘先填入未分配盈餘欄）；請填入期初餘額及各項變動。本期綜合損益總額列僅供參考，匯入時略過。無法歸類之變動請填入「其他」列。';
+    const buf = await wb.xlsx.writeBuffer();
+    download(`${p.settings.companyName}_${p.settings.baseYear}_權益變動表範本.xlsx`, buf as ArrayBuffer, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  };
+  const apply = () => update((np) => { np.base.sceActual = { ...res!.values, ...sceTotals(res!.values, keys) }; for (const id of unsupported) delete np.base.sceActual[id]; }, { action: '匯入基期權益變動表', detail: `${file!.name}：${Object.keys(res!.values).length} 項` });
+  const ncol = sheet ? Math.max(1, ...sheet.rows.slice(0, 30).map((r) => r.length)) : 0;
+  return (
+    <div className="subcard">
+      <div className="row">
+        <label className="file">匯入基期權益變動表（矩陣格式 .xlsx、.csv）<input type="file" accept=".xlsx,.csv,.txt" onChange={(e) => { if (e.target.files?.[0]) onFile(e.target.files[0]); e.target.value = ''; }} /></label>
+        <button className="mini" onClick={templ}>下載範本</button>
+      </div>
+      <p className="hint">格式：欄為權益組成（股本、資本公積、預收股本、法定／特別盈餘公積、未分配盈餘、其他權益、庫藏股票、權益總額），列為變動項目（期初餘額、盈餘公積提列、現金股利、本期淨利、其他綜合損益、現金增資、其他、期末餘額）。保留盈餘細項加總為保留盈餘；盈餘公積提列於保留盈餘內互抵；權益總額欄及期末餘額列僅供核對。</p>
+      {file && sheet && res && (
+        <div>
+          <div className="form compact">
+            <label>工作表<select value={si} onChange={(e) => { setSi(+e.target.value); init(file.sheets[+e.target.value]); }}>{file.sheets.map((s, i) => <option key={i} value={i}>{s.name}</option>)}</select></label>
+            <label>標題列（第幾列）<NumInput value={hdr + 1} onCommit={(v) => v && setHdr(v - 1)} /></label>
+            <label>項目欄<select value={labelCol} onChange={(e) => setLabelCol(+e.target.value)}>{colOpts(sheet)}</select></label>
+            <label>金額單位<select value={unit} onChange={(e) => setUnit(+e.target.value)}><option value={1}>元</option><option value={1000}>千元</option></select></label>
+          </div>
+          <div className="grid-wrap">
+            <table className="grid map small">
+              <thead>
+                <tr><th>項目</th><th>對應變動</th>{res.columns.map((c) => <th key={c.col}>{c.header}<br />
+                  <select value={c.comp ?? ''} onChange={(e) => setColOv({ ...colOv, [c.col]: (e.target.value || null) as Comp | null })}>
+                    <option value="">（略過）</option>{(Object.keys(COMP_LABEL) as Comp[]).map((k) => <option key={k} value={k}>{COMP_LABEL[k]}</option>)}
+                  </select></th>)}</tr>
+              </thead>
+              <tbody>
+                {res.rows.map((r) => (
+                  <tr key={r.row} className={r.move === 'close' ? 'subtotal' : !r.move || r.move === 'skip' ? 'skip' : ''}>
+                    <td>{r.label}</td>
+                    <td><select value={r.move ?? ''} onChange={(e) => setRowOv({ ...rowOv, [r.row]: (e.target.value || null) as Move | null })}>
+                      <option value="">（略過）</option>{(Object.keys(MOVE_LABEL) as Move[]).map((m) => <option key={m} value={m}>{MOVE_LABEL[m]}</option>)}
+                    </select></td>
+                    {res.columns.map((c) => <td key={c.col} className="num">{sheet.rows[r.row]?.[c.col]}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <table className="grid">
+            <thead><tr><th>權益組成</th><th>期初＋變動</th><th>基期資產負債表</th><th>原表期末</th><th>核對</th></tr></thead>
+            <tbody>
+              {recon.map((x) => {
+                const ok = Math.abs(x.calc - x.bs) < 1;
+                return <tr key={x.k} className={ok ? '' : 'lv-warning'}><td>{COMP_LABEL[x.k as Comp]}</td><td className="num">{fmtVal(x.calc, 'amount', 'yuan')}</td><td className="num">{fmtVal(x.bs, 'amount', 'yuan')}</td><td className="num">{x.file === undefined ? '—' : fmtVal(x.file, 'amount', 'yuan')}</td><td>{ok ? '✓' : `差額 ${fmtVal(x.calc - x.bs, 'amount', 'yuan')}`}</td></tr>;
+              })}
+            </tbody>
+          </table>
+          {unsupported.length > 0 && <p className="warn">⚠ 專案未設定下列權益組成之科目，相關金額不會匯入：{unsupported.join('、')}（例如庫藏股票請先於基期資料對應「庫藏股票」科目）</p>}
+          {res.issues.map((x, i) => <p key={i} className="warn">⚠ {x}</p>)}
+          <button className="primary" disabled={!Object.keys(res.values).length} onClick={() => { if (!Object.keys(p.base.sceActual).length || confirm('將取代目前之基期權益變動表實際數，確定？')) { apply(); setFile(null); } }}>套用（取代目前基期權益變動表）</button> <button onClick={() => setFile(null)}>取消</button>
         </div>
       )}
     </div>

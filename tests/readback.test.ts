@@ -59,3 +59,35 @@ describe('基期現金流量表科目對應', () => {
     expect(m('神秘項目')).toBeNull();
   });
 });
+
+import { parseSce, findHeaderRow, sceTotals } from '../src/engine/sceImport';
+describe('基期權益變動表匯入', () => {
+  it('矩陣格式解析、保留盈餘細項加總、盈餘公積提列互抵', () => {
+    const rows = [
+      ['範例公司　權益變動表', ''],
+      ['項目', '股本', '資本公積', '法定盈餘公積', '特別盈餘公積', '未分配盈餘', '保留盈餘合計', '庫藏股票', '權益總額'],
+      ['期初餘額', '60,000', '5,000', '3,000', '0', '5,440', '8,440', '(1,000)', '72,440'],
+      ['提列法定盈餘公積', '', '', '1,000', '', '(1,000)', '', '', ''],
+      ['現金股利', '', '', '', '', '(10,000)', '(10,000)', '', '(10,000)'],
+      ['本期淨利', '', '', '', '', '26,560', '26,560', '', '26,560'],
+      ['本期綜合損益總額', '', '', '', '', '26,560', '26,560', '', '26,560'],
+      ['買回庫藏股', '', '', '', '', '', '', '(500)', '(500)'],
+      ['期末餘額', '60,000', '5,000', '4,000', '0', '21,000', '25,000', '(1,500)', '88,500'],
+    ];
+    const h = findHeaderRow(rows);
+    expect(h).toBe(1);
+    const r = parseSce(rows, h, 0, 1000);
+    expect(r.values['sce:cap_open']).toBe(60_000_000);
+    expect(r.values['sce:re_open']).toBe(8_440_000);
+    expect(r.values['sce:re_div']).toBe(-10_000_000);
+    expect(r.values['sce:re_ni']).toBe(26_560_000);
+    expect(r.values['sce:ot_open']).toBe(-1_000_000);
+    expect(r.values['sce:ot_chg']).toBe(-500_000);
+    expect(r.close.re).toBe(25_000_000);
+    expect(r.approp).toBe(0);
+    expect(r.issues).toEqual([]);
+    const t = sceTotals(r.values, ['cap', 'cs', 'adv', 're', 'oe', 'ot']);
+    expect(t['sce:t_open']).toBe(72_440_000);
+    expect(t['sce:t_owner']).toBe(-10_000_000);
+  });
+});

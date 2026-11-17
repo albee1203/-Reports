@@ -172,7 +172,7 @@ export async function buildWorkbook(o: ExportOptions): Promise<ExcelJS.Workbook>
       const sig = ws.getRow(last + 3);
       sig.getCell(1).value = '負責人：＿＿＿＿＿＿＿＿';
       sig.getCell(FIRST_DATA_COL + Math.max(0, g.columns.length - 3)).value = '財務主管：＿＿＿＿＿＿＿＿';
-      ws.getRow(last + 1).getCell(1).value = '註：「預估」欄位為依假設推估之預估數，非實際數。';
+      ws.getRow(last + 1).getCell(1).value = `註：「預估」欄位為依假設推估之預估數，非實際數。${st.unit === 'thousand' ? '金額以新台幣千元表達，因四捨五入，合計數與明細加總可能有尾差。' : ''}`;
       ws.getRow(last + 1).getCell(1).font = { italic: true, size: 9 };
     }
     if (name === SH.ck) {

@@ -69,6 +69,18 @@ export function collectIssues(p: Project, sc: Scenario, g: Graph, ev: EvalResult
     });
   }
 
+  // --- 基期權益變動表：期初＋變動＝期末 ---
+  if (Object.keys(p.base.sceActual).length) {
+    for (const k of ['cap', 'cs', 'adv', 're', 'oe', 'ot']) {
+      const close = g.byId.get(`sce:${k}_close`);
+      if (!close) continue;
+      const parts = g.rows.filter((r) => r.sheet === SH.sce && r.id.startsWith(`sce:${k}_`) && r.id !== `sce:${k}_close`);
+      const sum = parts.reduce((t, r) => t + ev.num(r.id, info.cb), 0);
+      const diff = sum - ev.num(close.id, info.cb);
+      if (Math.abs(diff) >= 0.5) out.push({ level: 'warning', category: '勾稽', year: g.columns[info.cb].year, item: `基期權益變動表－${g.byId.get(`sce:h_${k}`)?.label ?? k}`, message: `期初餘額加本期變動與期末餘額（資產負債表）不一致，差額 ${fmt(diff)}`, page: 'base' });
+    }
+  }
+
   // --- 未完成假設 ---
   const stmtRows = g.rows.filter((r) => STATEMENT_SHEETS.includes(r.sheet as any));
   const seen = new Set<string>();

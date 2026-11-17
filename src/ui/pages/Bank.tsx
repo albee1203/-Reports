@@ -150,7 +150,7 @@ export function PrintView({ onClose }: { onClose: () => void }) {
                   ))}
                 </tbody>
               </table>
-              <p className="pn">註：標示「預估」之欄位係依假設編製之財務預估數，非實際數。</p>
+              <p className="pn">註：標示「預估」之欄位係依假設編製之財務預估數，非實際數。{u === 'thousand' && '金額以新台幣千元表達，因四捨五入，合計數與明細加總可能有尾差。'}</p>
               <div className="sig"><span>負責人：＿＿＿＿＿＿＿＿＿＿</span><span>財務主管：＿＿＿＿＿＿＿＿＿＿</span></div>
             </div></section>
           );

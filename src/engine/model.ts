@@ -553,7 +553,9 @@ export function buildGraph(p: Project, sc: Scenario): { g: Graph; info: ModelInf
     const { baseF, ...extra } = opt;
     return frow(SH.sce, id, label, 'amount', f, { base: baseF ?? sceBase(id), comp: () => NA(), ...extra });
   };
-  const comp = (key: string, label: string, closeSrc: string, closeBase: (c: number) => Expr, moves: { id: string; label: string; f: (c: number) => Expr }[]) => {
+  const comp = (key: string, label: string, closeSrc: string, closeBase: (c: number) => Expr, moves0: { id: string; label: string; f: (c: number) => Expr }[]) => {
+    // 「其他變動」：承接基期實際報表中無法歸類之變動；預估年度為零
+    const moves = [...moves0, { id: `sce:${key}_oth`, label: '其他變動', f: () => n(0) }];
     addRow(SH.sce, `sce:h_${key}`, label, 'text', Array(ncol).fill(null), { style: 'header' });
     sceRow(`sce:${key}_open`, '期初餘額', (c) => r(`sce:${key}_close`, c - 1), { indent: 1 });
     for (const m of moves) sceRow(m.id, m.label, m.f, { indent: 1 });
@@ -575,6 +577,7 @@ export function buildGraph(p: Project, sc: Scenario): { g: Graph; info: ModelInf
   sceRow('sce:t_ci', '本期綜合損益總額', (c) => add(r('sce:re_ni', c), r('sce:oe_oci', c)), { indent: 1 });
   sceRow('sce:t_owner', '與業主之交易（增資、股利）', (c) => add(r('sce:cap_inc', c), r('sce:cs_inc', c), r('sce:adv_chg', c), r('sce:re_div', c)), { indent: 1 });
   if (otherEqAccts.length) sceRow('sce:t_other', '其他權益項目變動', (c) => r('sce:ot_chg', c), { indent: 1 });
+  sceRow('sce:t_oth', '其他變動', (c) => add(...keys.map((k) => r(`sce:${k}_oth`, c))), { indent: 1 });
   sceRow('sce:t_close', '期末權益', (c) => add(...keys.map((k) => r(`sce:${k}_close`, c))), { baseF: (c) => add(...keys.map((k) => r(`sce:${k}_close`, c))), style: 'total' });
 
   // ===== 財務比率 =====

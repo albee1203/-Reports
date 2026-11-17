@@ -16,6 +16,11 @@ describe('importer', () => {
     expect(parseAmount('△500').value).toBe(-500);
     expect(parseAmount('１２３').value).toBe(123);
     expect(parseAmount('x1').error).toBeTruthy();
+    expect(parseAmount('-10000000').value).toBe(-10_000_000);
+    expect(parseAmount('-1,234.5').value).toBe(-1234.5);
+    expect(parseAmount('－500').value).toBe(-500);
+    expect(parseAmount('500-').value).toBe(-500);
+    expect(parseAmount('◎500').error).toBeTruthy();
   });
   it('maps, flags and reconciles', () => {
     const lay = guessLayout(rows);
