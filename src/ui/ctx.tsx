@@ -1,3 +1,4 @@
+import { fmtAmt, paren } from '../engine/format';
 import { createContext, useContext } from 'react';
 import { Graph, EvalResult, Row, RowFormat, Value, exprToText, refsOf } from '../engine/graph';
 import { ModelInfo } from '../engine/model';
@@ -30,13 +31,13 @@ export function fmtVal(v: Value, format: RowFormat, unit: 'yuan' | 'thousand'): 
       const x = unit === 'thousand' ? v / 1000 : v;
       const r = Math.round(x);
       if (r === 0) return '-';
-      const s = Math.abs(r).toLocaleString('zh-TW');
-      return r < 0 ? `(${s})` : s;
+      return fmtAmt(r);
     }
-    case 'pct': return `${(v * 100).toFixed(2)}%`;
-    case 'ratio': return Math.abs(v) >= 1000 ? Math.round(v).toLocaleString('zh-TW') : String(+v.toFixed(4));
-    case 'days': case 'month': case 'years': return String(+v.toFixed(2));
-    case 'times': return `${v.toFixed(2)} 倍`;
+    // 負數或減少數一律以括號表示
+    case 'pct': return paren(v, (a) => `${(a * 100).toFixed(2)}%`);
+    case 'ratio': return Math.abs(v) >= 1000 ? fmtAmt(v) : paren(v, (a) => String(+a.toFixed(4)));
+    case 'days': case 'month': case 'years': return paren(v, (a) => String(+a.toFixed(2)));
+    case 'times': return paren(v, (a) => `${a.toFixed(2)} 倍`);
     default: return String(v);
   }
 }

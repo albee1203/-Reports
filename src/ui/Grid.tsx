@@ -3,6 +3,7 @@ import { Row, Cell } from '../engine/graph';
 import { useP, fmtVal } from './ctx';
 import { setPath, getPath } from './store';
 import { parseAmount } from '../engine/importer';
+import { fmtNum } from '../engine/format';
 
 // 貼上值轉換：百分比列「8%」或「8」→ 0.08；小於 1 之數字視為小數比率
 export function pasteValue(txt: string, format: string, options?: string[]): any {
@@ -19,14 +20,15 @@ export function pasteValue(txt: string, format: string, options?: string[]): any
 export function NumInput({ value, pct, onCommit, className, placeholder }: { value: number | null; pct?: boolean; onCommit: (v: number | null) => void; className?: string; placeholder?: string }) {
   // 未編輯時以千分位顯示，編輯時顯示原始數字
   const [focus, setFocus] = useState(false);
-  const show = (v: number | null, f = focus) => (v === null || v === undefined ? '' : pct ? String(+(v * 100).toFixed(6)) : f ? String(v) : v.toLocaleString('zh-TW', { maximumFractionDigits: 6 }));
+  const show = (v: number | null, f = focus) => (v === null || v === undefined ? '' : pct ? (f ? String(+(v * 100).toFixed(6)) : fmtNum(v * 100)) : f ? String(v) : fmtNum(v));
   const [txt, setTxt] = useState(show(value));
   useEffect(() => setTxt(show(value)), [value, focus]);
   const commit = () => {
-    const t = txt.replace(/,/g, '').trim();
+    const t = txt.trim();
     if (t === '') { if (value !== null) onCommit(null); return; }
-    const v = Number(t);
-    if (!isFinite(v)) { setTxt(show(value)); return; }
+    const pa = parseAmount(t); // 接受 1,234、(1,234)、-1,234
+    if (pa.error || pa.value === null) { setTxt(show(value)); return; }
+    const v = pa.value;
     const nv = pct ? v / 100 : v;
     if (nv !== value) onCommit(nv);
   };

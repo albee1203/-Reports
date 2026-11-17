@@ -173,7 +173,7 @@ export function reconcileSubtotals(y: YearData, custom: AccountDef[] = []) {
   }
 }
 
-const fmt = (v: number) => Math.round(v).toLocaleString('zh-TW');
+import { fmtAmt as fmt } from './format';
 
 export function applyImport(y: YearData, raw: RawImport, lines: MappedLine[], custom: AccountDef[] = []) {
   y.lines = [...y.lines.filter((l) => l.importId !== raw.id), ...lines];

@@ -1,5 +1,6 @@
 // 基期權益變動表匯入（矩陣格式：欄＝權益組成，列＝變動項目）
 import { parseAmount } from './importer';
+import { fmtAmt } from './format';
 
 export type Comp = 'cap' | 'cs' | 'adv' | 're' | 'oe' | 'ot' | 'total';
 export type Move = 'open' | 'inc' | 'ni' | 'oci' | 'div' | 'approp' | 'oth' | 'close' | 'skip';
@@ -93,7 +94,7 @@ export function parseSce(rows: string[][], headerRow: number, labelCol: number, 
       if (id) values[id] = (values[id] ?? 0) + v;
     }
   }
-  if (Math.abs(approp) >= 1) issues.push(`盈餘公積提列於保留盈餘各欄合計應為 0，目前為 ${Math.round(approp).toLocaleString('zh-TW')}，差額已不計入`);
+  if (Math.abs(approp) >= 1) issues.push(`盈餘公積提列於保留盈餘各欄合計應為 0，目前為 ${fmtAmt(approp)}，差額已不計入`);
   return { values, close, columns, rows: outRows, approp, issues };
 }
 

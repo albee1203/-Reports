@@ -4,6 +4,7 @@ import { Graph, EvalResult, exprToExcel, colLetter, exprToText, Row } from '../e
 import { SH, STATEMENT_SHEETS, isZeroRow } from '../engine/model';
 import { Project, Scenario, defaultPeriodText } from '../engine/project';
 import { reportStatus, Issue } from '../engine/checks';
+import { XL } from '../engine/format';
 
 export type ExportMode = 'internal' | 'bank';
 
@@ -23,7 +24,7 @@ const STY = {
 };
 
 export function amountFormat(unit: 'yuan' | 'thousand') {
-  return unit === 'thousand' ? '#,##0,;(#,##0,);"-"' : '#,##0;(#,##0);"-"';
+  return unit === 'thousand' ? XL.amountK : XL.amount;
 }
 
 export interface ExportOptions {
@@ -127,7 +128,7 @@ export async function buildWorkbook(o: ExportOptions): Promise<ExcelJS.Workbook>
       if (r.hidden && name === SH.base) xr.hidden = true;
       // 銀行版：正式報表隱藏全部年度皆為零之科目列（公式保留，取消隱藏即可檢視）
       if (mode === 'bank' && (isStmt || name === SH.ratio) && isZeroRow(r, ev, g.columns.length)) xr.hidden = true;
-      const numFmt = r.format === 'amount' ? amtFmt : r.format === 'pct' ? '0.00%' : r.format === 'ratio' ? '#,##0.####' : r.format === 'times' ? '0.00"倍"' : r.format === 'days' || r.format === 'month' || r.format === 'years' ? '0' : undefined;
+      const numFmt = r.format === 'amount' ? amtFmt : r.format === 'pct' ? XL.pct : r.format === 'ratio' ? XL.ratio : r.format === 'times' ? XL.times : r.format === 'days' ? XL.dec : r.format === 'month' || r.format === 'years' ? XL.dec : undefined;
       r.cells.forEach((cell, ci) => {
         if (!cell) return;
         const xc = xr.getCell(FIRST_DATA_COL + ci);

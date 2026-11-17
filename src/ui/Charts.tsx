@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { fmtAmt } from '../engine/format';
 
 // 類別色（固定順序指派，不循環；已通過色盲辨識檢查）
 export const SERIES = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948'];
@@ -6,9 +7,9 @@ export const SERIES = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#
 const compact = (v: number) => {
   const a = Math.abs(v);
   const s = a >= 1e8 ? `${+(a / 1e8).toFixed(2)} 億` : a >= 1e4 ? `${+(a / 1e4).toFixed(a >= 1e7 ? 0 : 1)} 萬` : `${Math.round(a)}`;
-  return v < 0 ? `−${s}` : s;
+  return v < 0 ? `(${s})` : s;
 };
-const full = (v: number) => (v < 0 ? `(${Math.round(-v).toLocaleString('zh-TW')})` : Math.round(v).toLocaleString('zh-TW'));
+const full = fmtAmt;
 
 function niceTicks(lo: number, hi: number, n = 4) {
   if (hi === lo) hi = lo + 1;

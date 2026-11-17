@@ -1,6 +1,7 @@
 // 逐筆固定資產明細匯入：欄位對應、類別判斷、剩餘耐用年限推算
 import { FaAsset, uid, Num } from './project';
 import { parseAmount } from './importer';
+import { fmtAmt } from './format';
 
 export type FaField = 'cls' | 'name' | 'acquired' | 'cost' | 'accDep' | 'accImp' | 'residual' | 'life' | 'remLife';
 export const FA_FIELDS: { key: FaField; label: string; required?: boolean; patterns: RegExp }[] = [
@@ -109,7 +110,7 @@ export function parseFaRows(rows: string[][], headerRow: number, cols: Partial<R
         remLife = +(life * (depBase / (cost - residual))).toFixed(2);
         note = '未提供取得日期，依未折減比例推算，概估';
       } else note = '';
-      if (depBase > 0.5 && (remLife === null || remLife <= 0)) issues.push(`${line}：尚有可折舊金額 ${Math.round(depBase).toLocaleString('zh-TW')}，但剩餘耐用年限為 ${remLife ?? '空白'}，請補入`);
+      if (depBase > 0.5 && (remLife === null || remLife <= 0)) issues.push(`${line}：尚有可折舊金額 ${fmtAmt(depBase)}，但剩餘耐用年限為 ${remLife ?? '空白'}，請補入`);
     }
     assets.push({ id: uid(), cls, name: name || `資產 ${i + 1}`, acquired, cost, accDep, accImp, residual, life, remLife: depreciable ? (remLife !== null && remLife > 0 ? remLife : null) : null, remLifeNote: note || undefined });
   }
