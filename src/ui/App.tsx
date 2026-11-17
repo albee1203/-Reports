@@ -38,6 +38,11 @@ const PAGES: { key: string; label: string; step?: number; hot?: string }[] = [
   { key: 'versions', label: '版本與修改紀錄' },
 ];
 
+// Chrome、Edge 等 Chromium 核心瀏覽器：本機 HTML 檔之資料儲存不受檔案位置影響
+const isChromium = () => {
+  try { const ua = navigator.userAgent; return /Chrome\/|Edg\//.test(ua) && !/Firefox|FxiOS|OPR\//.test(ua); } catch { return true; }
+};
+
 export default function App() {
   const [projectId, setProjectId] = useState<string | null>(null);
   return projectId ? <Workspace id={projectId} onClose={() => setProjectId(null)} /> : <ProjectList onOpen={setProjectId} />;
@@ -79,7 +84,8 @@ function ProjectList({ onOpen }: { onOpen: (id: string) => void }) {
     <div className="home">
       <header className="home-head">
         <h1>五年財務預估與銀行報表編修</h1>
-        <p className="privacy">🔒 所有財報資料僅儲存在本機瀏覽器（IndexedDB），匯入、計算、匯出皆在本機完成，不傳送至任何雲端或 AI 服務。清除瀏覽器資料會刪除專案，請定期匯出備份。</p>
+        <p className="privacy">🔒 所有財報資料僅儲存在這台電腦的瀏覽器中，匯入、計算、匯出皆在本機完成，不傳送至任何網站或 AI 服務。在 Chrome／Edge 中，App 檔案可移動位置或以新版取代，專案仍會保留；換電腦、換瀏覽器、清除瀏覽器資料或使用無痕視窗時，請以「備份」檔還原。</p>
+        {!isChromium() && <p className="warn">⚠ 建議使用 Chrome 或 Edge 開啟本 App。目前瀏覽器對本機檔案之資料儲存規則較嚴格，移動檔案位置後可能看不到原專案，請務必定期備份。</p>}
         {store && (
           <p className="muted small">
             本機儲存：{store.persisted ? '已取得持久儲存（瀏覽器不會自動清除）' : store.persisted === false ? '未取得持久儲存，瀏覽器空間不足時可能清除資料，請務必定期備份' : '此瀏覽器不支援持久儲存設定，請務必定期備份'}
