@@ -1,4 +1,4 @@
-import { fmtAmt, paren } from '../engine/format';
+import { fmtAmt } from '../engine/format';
 import { createContext, useContext } from 'react';
 import { Graph, EvalResult, Row, RowFormat, Value, exprToText, refsOf } from '../engine/graph';
 import { ModelInfo } from '../engine/model';
@@ -33,11 +33,11 @@ export function fmtVal(v: Value, format: RowFormat, unit: 'yuan' | 'thousand'): 
       if (r === 0) return '-';
       return fmtAmt(r);
     }
-    // 負數或減少數一律以括號表示
-    case 'pct': return paren(v, (a) => `${(a * 100).toFixed(2)}%`);
-    case 'ratio': return Math.abs(v) >= 1000 ? fmtAmt(v) : paren(v, (a) => String(+a.toFixed(4)));
-    case 'days': case 'month': case 'years': return paren(v, (a) => String(+a.toFixed(2)));
-    case 'times': return paren(v, (a) => `${a.toFixed(2)} 倍`);
+    // 金額以外之數字以負號表示
+    case 'pct': return `${(v * 100).toFixed(2)}%`;
+    case 'ratio': return Math.abs(v) >= 1000 ? fmtAmt(v) : String(+v.toFixed(4));
+    case 'days': case 'month': case 'years': return String(+v.toFixed(2));
+    case 'times': return `${v.toFixed(2)} 倍`;
     default: return String(v);
   }
 }

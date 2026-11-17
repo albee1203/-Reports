@@ -133,6 +133,8 @@ export async function buildWorkbook(o: ExportOptions): Promise<ExcelJS.Workbook>
         if (!cell) return;
         const xc = xr.getCell(FIRST_DATA_COL + ci);
         if (numFmt) xc.numFmt = numFmt;
+        // 金額或比率混用之參數：依數值個別設定，金額（絕對值 1,000 以上）負數以括號表示
+        if (r.format === 'ratio' && typeof ev.value(r.id, ci) === 'number' && Math.abs(ev.value(r.id, ci) as number) >= 1000) xc.numFmt = amtFmt;
         const cached = ev.value(r.id, ci);
         switch (cell.kind) {
           case 'na':

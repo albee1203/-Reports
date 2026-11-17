@@ -103,7 +103,7 @@ export function LoansPage() {
               <tr key={l.id}>
                 <td><input value={l.name} onChange={(e) => mut(l.id, (x) => (x.name = e.target.value), `名稱：${e.target.value}`)} /></td>
                 <td><select value={l.type} onChange={(e) => mut(l.id, (x) => (x.type = e.target.value), `${l.name} 類型：${e.target.value}`)}><option value="short">短期借款</option><option value="long">長期借款</option></select></td>
-                <td className="in"><NumInput value={l.baseBalance} onCommit={(v) => mut(l.id, (x) => (x.baseBalance = v), `${l.name} 基期餘額：${v}`)} /></td>
+                <td className="in"><NumInput amount value={l.baseBalance} onCommit={(v) => mut(l.id, (x) => (x.baseBalance = v), `${l.name} 基期餘額：${v}`)} /></td>
                 <td><button className="danger mini" onClick={() => confirm(`刪除「${l.name}」？`) && update((np) => { const s = np.scenarios.find((x) => x.id === sc.id)!; s.loans = s.loans.filter((x) => x.id !== l.id); }, { action: '刪除借款', detail: l.name })}>刪除</button></td>
               </tr>
             ))}

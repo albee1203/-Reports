@@ -28,7 +28,7 @@ export function SettingsPage() {
           </select>
           <span className="hint">僅影響顯示及輸出版面；底層以元計算，保留精度。</span>
         </label>
-        <label>年末現金警示門檻（元）<NumInput value={s.cashThreshold} onCommit={(v) => v !== null && set('cashThreshold', v, '現金警示門檻')} /><span className="hint">預設 20,000,000；僅檢查各預估年度年末現金，不自動新增借款。</span></label>
+        <label>年末現金警示門檻（元）<NumInput amount value={s.cashThreshold} onCommit={(v) => v !== null && set('cashThreshold', v, '現金警示門檻')} /><span className="hint">預設 20,000,000；僅檢查各預估年度年末現金，不自動新增借款。</span></label>
         <label>借款／資產可用預設月份<NumInput value={s.defaultMonth} onCommit={(v) => v && v >= 1 && v <= 12 && set('defaultMonth', Math.round(v), '預設月份')} /><span className="hint">月份留白時採用；初始 7 月＝計息半年（月初生效，計息月數＝13−月份）。</span></label>
         <label>週轉天數計算基礎<NumInput value={s.daysBasis} onCommit={(v) => v && set('daysBasis', v, '天數基礎')} /></label>
         <label>支付利息之現金流量分類

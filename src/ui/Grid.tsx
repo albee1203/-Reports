@@ -3,7 +3,9 @@ import { Row, Cell } from '../engine/graph';
 import { useP, fmtVal } from './ctx';
 import { setPath, getPath } from './store';
 import { parseAmount } from '../engine/importer';
-import { fmtNum } from '../engine/format';
+import { paren } from '../engine/format';
+// 金額輸入：保留小數，負數以括號表示
+const fmtAmtExact = (v: number) => paren(v, (a) => a.toLocaleString('zh-TW', { maximumFractionDigits: 6 }));
 
 // 貼上值轉換：百分比列「8%」或「8」→ 0.08；小於 1 之數字視為小數比率
 export function pasteValue(txt: string, format: string, options?: string[]): any {
@@ -17,10 +19,10 @@ export function pasteValue(txt: string, format: string, options?: string[]): any
   return pa.value;
 }
 
-export function NumInput({ value, pct, onCommit, className, placeholder }: { value: number | null; pct?: boolean; onCommit: (v: number | null) => void; className?: string; placeholder?: string }) {
+export function NumInput({ value, pct, amount, onCommit, className, placeholder }: { value: number | null; pct?: boolean; amount?: boolean; onCommit: (v: number | null) => void; className?: string; placeholder?: string }) {
   // 未編輯時以千分位顯示，編輯時顯示原始數字
   const [focus, setFocus] = useState(false);
-  const show = (v: number | null, f = focus) => (v === null || v === undefined ? '' : pct ? (f ? String(+(v * 100).toFixed(6)) : fmtNum(v * 100)) : f ? String(v) : fmtNum(v));
+  const show = (v: number | null, f = focus) => (v === null || v === undefined ? '' : pct ? String(+(v * 100).toFixed(6)) : amount && !f ? fmtAmtExact(v) : String(v));
   const [txt, setTxt] = useState(show(value));
   useEffect(() => setTxt(show(value)), [value, focus]);
   const commit = () => {
@@ -53,7 +55,7 @@ export function InputCell({ row, cell }: { row: Row; cell: Cell }) {
       </select>
     );
   }
-  return <NumInput value={cell.value as number | null} pct={row.format === 'pct'} onCommit={commit} className={missing ? 'missing' : ''} placeholder={missing ? '未完成' : ''} />;
+  return <NumInput value={cell.value as number | null} pct={row.format === 'pct'} amount={row.format === 'amount'} onCommit={commit} className={missing ? 'missing' : ''} placeholder={missing ? '未完成' : ''} />;
 }
 
 const fmtLog = (v: any) => (v === null || v === undefined || v === '' ? '（空白）' : String(v));

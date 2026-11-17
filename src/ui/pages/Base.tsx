@@ -191,7 +191,7 @@ function AccountSummary({ y }: { y: YearData }) {
                   <tr key={a.code}>
                     <td style={{ paddingLeft: 16 }}>{a.name}{a.custom && <span className="tag">自訂</span>}</td>
                     <td className="num">{y.accounts[a.code] !== undefined ? fmtVal(y.accounts[a.code], 'amount', 'yuan') : <span className="na">未提供</span>}</td>
-                    <td className="in"><NumInput value={y.manual[a.code] ?? null} onCommit={(v) => update((np) => { const yd = yi(np); if (v === null) delete yd.manual[a.code]; else yd.manual[a.code] = v; }, { action: '手動輸入基期科目', detail: `${y.year} ${a.name}：${v ?? '清除'}` })} /></td>
+                    <td className="in"><NumInput amount value={y.manual[a.code] ?? null} onCommit={(v) => update((np) => { const yd = yi(np); if (v === null) delete yd.manual[a.code]; else yd.manual[a.code] = v; }, { action: '手動輸入基期科目', detail: `${y.year} ${a.name}：${v ?? '清除'}` })} /></td>
                   </tr>
                 ))]
               ))}
@@ -248,7 +248,7 @@ function BaseExtraStatements() {
           {rows(sheet).map((r) => (
             <tr key={r.id} className={r.style ?? ''}>
               <td style={{ paddingLeft: 6 + (r.indent ?? 0) * 12 }}>{r.label}</td>
-              {r.style === 'header' ? <td /> : <td className="in" onPasteCapture={(e) => onPaste(e, sheet, key, r.id, title)}><NumInput value={p.base[key][r.id] ?? null} placeholder="未提供" onCommit={(v) => update((np) => { if (v === null) delete np.base[key][r.id]; else np.base[key][r.id] = v; }, { action: `補入基期${title}`, detail: `${r.label}：${v ?? '清除'}` })} /></td>}
+              {r.style === 'header' ? <td /> : <td className="in" onPasteCapture={(e) => onPaste(e, sheet, key, r.id, title)}><NumInput amount value={p.base[key][r.id] ?? null} placeholder="未提供" onCommit={(v) => update((np) => { if (v === null) delete np.base[key][r.id]; else np.base[key][r.id] = v; }, { action: `補入基期${title}`, detail: `${r.label}：${v ?? '清除'}` })} /></td>}
             </tr>
           ))}
         </tbody>

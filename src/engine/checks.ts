@@ -196,7 +196,7 @@ export function inputSanity(g: Graph): Issue[] {
     row.cells.forEach((cell, c) => {
       if (!cell || cell.kind !== 'input' || typeof cell.value !== 'number') return;
       const msg = rule.check(cell.value);
-      if (msg) out.push({ level: rule.level ?? 'warning', category: '輸入檢查', year: g.columns[c].type === 'forecast' ? g.columns[c].year : undefined, item: row.label, message: `${msg}（目前：${fmtNum(cell.value)}）`, rowId: row.id, page: row.sheet === '固定資產' || row.sheet === '固定資產明細' ? 'fixed' : row.sheet === '借款' ? 'loans' : 'assumptions' });
+      if (msg) out.push({ level: rule.level ?? 'warning', category: '輸入檢查', year: g.columns[c].type === 'forecast' ? g.columns[c].year : undefined, item: row.label, message: `${msg}（目前：${row.format === 'amount' ? fmt(cell.value) : row.format === 'pct' ? `${+(cell.value * 100).toFixed(4)}%` : fmtNum(cell.value)}）`, rowId: row.id, page: row.sheet === '固定資產' || row.sheet === '固定資產明細' ? 'fixed' : row.sheet === '借款' ? 'loans' : 'assumptions' });
     });
   }
   return out;

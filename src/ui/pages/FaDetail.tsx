@@ -85,7 +85,7 @@ export function FaDetailSection() {
                     <td><select value={a.cls} onChange={(e) => setA(a.id, 'cls', e.target.value)}>{FA_CLASSES.map((c) => <option key={c.key} value={c.key}>{c.name}</option>)}</select></td>
                     <td><input value={a.name} onChange={(e) => setA(a.id, 'name', e.target.value)} /></td>
                     <td className="nowrap">{a.acquired}</td>
-                    {(['cost', 'accDep', 'accImp', 'residual', 'life', 'remLife'] as const).map((f) => <td key={f} className="in"><NumInput value={a[f]} onCommit={(v) => setA(a.id, f, v)} /></td>)}
+                    {(['cost', 'accDep', 'accImp', 'residual', 'life', 'remLife'] as const).map((f) => <td key={f} className="in"><NumInput amount={!['life', 'remLife'].includes(f)} value={a[f]} onCommit={(v) => setA(a.id, f, v)} /></td>)}
                     <td className="desc small">{a.remLifeNote}</td>
                     <td><button className="mini danger" onClick={() => update((np) => { np.faAssets = np.faAssets!.filter((x) => x.id !== a.id); }, { action: '刪除固定資產明細', detail: a.name })}>刪除</button></td>
                   </tr>
