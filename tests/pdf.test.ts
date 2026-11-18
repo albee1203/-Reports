@@ -78,6 +78,16 @@ describe('PDF 財報匯入（文字型）', async () => {
     expect(reSum).toBe(r.close.re);
   });
 
+  it('財報_左右並列.pdf：資產負債表左資產、右負債及權益', async () => {
+    const sheets = itemsToSheets(await extractItems(pdfjs, load('tests/fixtures/財報_左右並列.pdf')));
+    const bs = sheets.find((x) => x.name.startsWith('資產負債表'))!;
+    for (const w of ['base', 'comp'] as const) {
+      const { y } = await importSheet(bs.rows, 'BS', w);
+      expect(problems(y)).toEqual([]);
+      expect(y.accounts).toEqual(expected[`BS-${w}`]);
+    }
+  });
+
   it('財報_標準中文字型.pdf（字型未內嵌，需繁體中文字元對照表）', async () => {
     const withCMap = { ...pdfjs, getDocument: (o: any) => (pdfjs as any).getDocument({ ...o, cMapUrl: 'node_modules/pdfjs-dist/cmaps/', cMapPacked: true }) };
     const sheets = itemsToSheets(await extractItems(withCMap, load('tests/fixtures/財報_標準中文字型.pdf')));

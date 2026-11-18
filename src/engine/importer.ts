@@ -105,6 +105,8 @@ export function buildLines(rows: string[][], cfg: MapConfig, importId: string, c
     if (!label && !raw) continue;
     // 無金額之列（分類標題，如「流動資產」「營業費用」）：略過，不列為問題
     if (label && !raw) { lines.push({ importId, rowIndex: i, label, rawAmount: '', amount: null, account: null, kind: 'ignore', issues: [], confirmed: true }); continue; }
+    // 金額欄為中文（如表頭「114年12月31日 金額」）：表頭或標題列，略過
+    if (/[\u4e00-\u9fff]/.test(raw.replace(/元/g, ''))) { lines.push({ importId, rowIndex: i, label, rawAmount: raw, amount: null, account: null, kind: 'ignore', issues: [], confirmed: true }); continue; }
     if (!label) { lines.push({ importId, rowIndex: i, label: '（無科目名稱）', rawAmount: raw, amount: null, account: null, kind: 'ignore', issues: ['無科目名稱，已略過'], confirmed: false }); continue; }
     const issues: string[] = [];
     const pa = parseAmount(raw);

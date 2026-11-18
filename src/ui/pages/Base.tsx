@@ -99,7 +99,14 @@ function ImportWizard({ year }: { year: number }) {
       ] });
       return;
     }
-    setResult({ ok: true, lines: [`已匯入「${sheet.name}」：${withAmt.length} 列有金額，其中 ${mapped.length} 列已自動對應科目${withAmt.length - mapped.length ? `，${withAmt.length - mapped.length} 列待指定科目（見下方「科目對應」）` : ''}。`] });
+    // 原表合計核對：不符者直接提示（多為金額欄選錯或特殊版式）
+    const ty = emptyYear(year);
+    applyImport(ty, newRawImport(full, sheet.rows), buildLines(sheet.rows, full, 'trial', p.customAccounts), p.customAccounts);
+    const bad = ty.lines.filter((l) => l.kind === 'subtotal' && l.issues.some((x) => x.startsWith('原表')));
+    setResult({ ok: !bad.length, lines: [
+      `已匯入「${sheet.name}」：${withAmt.length} 列有金額，其中 ${mapped.length} 列已自動對應科目${withAmt.length - mapped.length ? `，${withAmt.length - mapped.length} 列待指定科目（見下方「科目對應」）` : ''}。`,
+      ...(bad.length ? [`⚠ 原表合計核對有 ${bad.length} 項不符（${bad.slice(0, 3).map((l) => l.label).join('、')}${bad.length > 3 ? ' 等' : ''}），請檢查「金額欄」是否正確，或至下方「科目對應」確認各列金額。`] : ['✓ 原表合計核對相符。']),
+    ] });
     update((np) => {
       const raw = newRawImport(full, sheet.rows);
       np.imports.push(raw);

@@ -169,7 +169,63 @@ export const STATEMENT_SHEET = /^(合併|個體)?(資產負債表|綜合損益�
 
 const HEADER_CODE = /^(代碼|代號|編號|科目代號|會計科目代號)\s*(.*)$/;
 
+// 左右並列版式（如資產負債表左資產、右負債及權益）：同列中金額之後又出現中文科目者達 5 列以上，
+// 自右半之代碼（或科目）位置切開，左右各自還原後上下相接；右半頂端之標題、單位等移至最上方
 function pageGrid(items: PdfItem[]): string[][] {
+  const sp = sideBySideSplit(items);
+  if (sp === null) return gridOf(items);
+  const { split, top } = sp;
+  // 表格本體以上之標題列（公司名稱、報表名稱、日期、單位）不拆分，置於左半之上
+  const body = items.filter((i) => i.y >= top);
+  const head = items.filter((i) => i.y < top);
+  const left = gridOf([...head, ...body.filter((i) => i.x < split)]);
+  const right = gridOf(body.filter((i) => i.x >= split));
+  const firstData = right.findIndex((r) => r.slice(2).some((c) => /\d/.test(c)) || /代碼|代號/.test(r[0]));
+  const pre = firstData > 0 ? right.slice(0, firstData) : [];
+  const rbody = firstData > 0 ? right.slice(firstData) : right;
+  const w = Math.max(0, ...[...left, ...right].map((r) => r.length));
+  const pad = (r: string[]) => [...r, ...Array(w - r.length).fill('')];
+  return [...pre, ...left, ...rbody].map(pad);
+}
+
+function sideBySideSplit(items: PdfItem[]): { split: number; top: number } | null {
+  const rows = toRows(items);
+  const xs: number[] = [];
+  const ys: number[] = [];
+  for (const toks of rows) {
+    let seenAmt = false;
+    for (let i = 0; i < toks.length; i++) {
+      const t = toks[i];
+      if (NUMERIC.test(t.str.trim()) && /\d/.test(t.str) && !CODE.test(t.str.trim())) { seenAmt = true; continue; }
+      if (seenAmt && CJK.test(t.str)) {
+        const prev = toks[i - 1];
+        xs.push(prev && CODE.test(prev.str.trim()) ? prev.x : t.x);
+        ys.push(t.y);
+        break;
+      }
+    }
+  }
+  if (xs.length < 5) return null;
+  xs.sort((a, b) => a - b);
+  const med = xs[Math.floor(xs.length / 2)];
+  const near = xs.filter((x) => Math.abs(x - med) < 30);
+  if (near.length < 5) return null;
+  const split = Math.min(...near) - 1;
+  // 表格頂端：第一個並列資料列往上，左右兩側皆有中文之列（左右表頭列，如「代碼 資產 … 代碼 負債及權益」）
+  const firstY = Math.min(...ys);
+  let top = firstY;
+  for (const toks of rows) {
+    const y = toks[0]?.y ?? Infinity;
+    if (y >= firstY) break;
+    const l = toks.some((t) => t.x < split && CJK.test(t.str)), r = toks.some((t) => t.x >= split && CJK.test(t.str));
+    const crosses = toks.some((t) => t.x < split && t.r > split);
+    if (l && r && !crosses) top = Math.min(top, y);
+  }
+  const h = items.length ? items[0].h : 10;
+  return { split, top: top - 0.3 * h };
+}
+
+function gridOf(items: PdfItem[]): string[][] {
   const rows = toRows(items);
   const isNum = (s: string) => NUMERIC.test(s.trim());
   // 每列：科目＝第一個含中文之詞；其前為代碼。表頭「代碼」與科目名稱相連時拆開
