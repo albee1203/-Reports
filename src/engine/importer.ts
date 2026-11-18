@@ -15,6 +15,10 @@ export async function readFile(name: string, buf: ArrayBuffer): Promise<SheetDat
     const res = Papa.parse<string[]>(text.replace(/^﻿/, ''), { skipEmptyLines: false });
     return [{ name: 'CSV', rows: res.data.map((r) => r.map((x) => String(x ?? ''))) }];
   }
+  if (lower.endsWith('.pdf')) {
+    const { readPdf } = await import('../pdfBrowser');
+    return readPdf(buf);
+  }
   if (lower.endsWith('.xls')) throw new Error('不支援舊版 .xls，請另存為 .xlsx 或 .csv 後再匯入');
   const ExcelJS = (await import('exceljs')).default;
   const wb = new ExcelJS.Workbook();
@@ -247,7 +251,7 @@ export function guessLayout(rows: string[][]): { headerRow: number; labelCol: nu
     const nums = cells.map((x) => parseAmount(x)).filter((p) => p.value !== null && !p.error).map((p) => Math.abs(p.value!));
     const h = String(hdr[c] ?? '');
     const codeLike = /代碼|編號/.test(h) || cells.filter((x) => /^\d{4}$|X/.test(x)).length > cells.length / 2;
-    const pctLike = /%|％|比率/.test(h) || (nums.length > 0 && nums.filter((v) => v <= 100).length / nums.length > 0.8);
+    const pctLike = /^[%％]$|比率|百分比/.test(h.trim()) || (nums.length > 0 && nums.filter((v) => v <= 100).length / nums.length > 0.8);
     if (!nums.length || codeLike || pctLike) continue;
     numScore.push({ c, score: nums.length + (/金額|年|\d{4}/.test(h) ? 5 : 0) });
   }

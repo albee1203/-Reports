@@ -50,9 +50,12 @@ function ImportWizard({ year }: { year: number }) {
     setErr(''); setDone([]);
     try {
       const sheets = await readFile(f.name, await f.arrayBuffer());
-      setFile({ name: f.name, sheets }); setSheetIdx(0);
-      const lay = guessLayout(sheets[0].rows);
-      applyGuess(sheets[0]);
+      // PDF：各頁報表不同（如第 1 頁資產負債表、第 2 頁損益表）時，預設由第 1 頁開始逐頁匯入
+      const title = (sh: SheetData) => { const t = sh.rows.slice(0, 6).flat().join(''); return /損益表/.test(t) ? 'IS' : /資產負債表/.test(t) ? 'BS' : /現金流量表/.test(t) ? 'CF' : /權益變動表/.test(t) ? 'SCE' : ''; };
+      const pages = sheets.filter((s) => /^第 \d+ 頁$/.test(s.name));
+      const start = sheets[0].name.startsWith('全部頁面') && new Set(pages.map(title).filter(Boolean)).size > 1 ? 1 : 0;
+      setFile({ name: f.name, sheets }); setSheetIdx(start);
+      applyGuess(sheets[start]);
     } catch (e: any) { setErr(e.message ?? String(e)); }
   };
   // 自動辨識版面、金額單位、報表類型與年度欄
@@ -92,14 +95,16 @@ function ImportWizard({ year }: { year: number }) {
     // 保留檔案，可直接切換至下一張工作表繼續匯入
     const nd = [...done, sheet.name];
     setDone(nd);
-    const next = file.sheets.findIndex((s) => !nd.includes(s.name));
+    const pageMode = nd.some((n) => /^第 \d+ 頁$/.test(n));
+    const next = file.sheets.findIndex((s) => !nd.includes(s.name) && !(pageMode && s.name.startsWith('全部頁面')));
     if (next >= 0) { setSheetIdx(next); applyGuess(file.sheets[next]); } else setFile(null);
   };
   const set = (k: string, v: any) => setCfg((c) => ({ ...c!, [k]: v }));
   return (
     <section className="card">
       <h2>匯入 Excel／CSV（{year} 年度）</h2>
-      <label className="file">選擇檔案（.xlsx、.csv）<input type="file" accept=".xlsx,.csv,.txt" onChange={(e) => { if (e.target.files?.[0]) onFile(e.target.files[0]); e.target.value = ''; }} /></label>
+      <label className="file">選擇檔案（.xlsx、.csv、.pdf）<input type="file" accept=".xlsx,.csv,.txt,.pdf" onChange={(e) => { if (e.target.files?.[0]) onFile(e.target.files[0]); e.target.value = ''; }} /></label>
+      <p className="hint">PDF 限電腦產生之文字型檔案（可在 PDF 中選取文字者）；每一頁視為一張工作表，跨頁報表可選「全部頁面」。掃描或拍照之 PDF 請改用 Excel 檔。</p>
       {done.length > 0 && <p className="ok small">已匯入工作表：{done.join('、')}{file ? '；可繼續匯入下一張工作表，或按「完成」。' : '。'}</p>}
       {err && <p className="error">{err}</p>}
       {file && sheet && cfg && (
@@ -343,7 +348,7 @@ function CfImport() {
   const apply = () => update((np) => { np.base.cfActual = { ...sums }; }, { action: '匯入基期現金流量表', detail: `${file!.name}：${Object.keys(sums).length} 列` });
   return (
     <div className="subcard">
-      <label className="file">匯入基期現金流量表（.xlsx、.csv）<input type="file" accept=".xlsx,.csv,.txt" onChange={(e) => { if (e.target.files?.[0]) onFile(e.target.files[0]); e.target.value = ''; }} /></label>
+      <label className="file">匯入基期現金流量表（.xlsx、.csv、.pdf）<input type="file" accept=".xlsx,.csv,.txt,.pdf" onChange={(e) => { if (e.target.files?.[0]) onFile(e.target.files[0]); e.target.value = ''; }} /></label>
       {file && sheet && (
         <div>
           <div className="form compact">
@@ -430,7 +435,7 @@ function SceImport() {
   return (
     <div className="subcard">
       <div className="row">
-        <label className="file">匯入基期權益變動表（矩陣格式 .xlsx、.csv）<input type="file" accept=".xlsx,.csv,.txt" onChange={(e) => { if (e.target.files?.[0]) onFile(e.target.files[0]); e.target.value = ''; }} /></label>
+        <label className="file">匯入基期權益變動表（矩陣格式 .xlsx、.csv、.pdf）<input type="file" accept=".xlsx,.csv,.txt,.pdf" onChange={(e) => { if (e.target.files?.[0]) onFile(e.target.files[0]); e.target.value = ''; }} /></label>
         <button className="mini" onClick={templ}>下載範本</button>
       </div>
       <p className="hint">格式：欄為權益組成（股本、資本公積、預收股本、法定／特別盈餘公積、未分配盈餘、其他權益、庫藏股票、權益總額），列為變動項目（期初餘額、盈餘公積提列、現金股利、本期淨利、其他綜合損益、現金增資、其他、期末餘額）。保留盈餘細項加總為保留盈餘；盈餘公積提列於保留盈餘內互抵；權益總額欄及期末餘額列僅供核對。</p>
