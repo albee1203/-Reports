@@ -72,6 +72,7 @@ export interface MappedLine {
   kind: 'detail' | 'subtotal' | 'ignore';
   subtotalCheck?: string | null;
   note?: string; // 說明（非問題，如自動判定為小計列）
+  userSet?: boolean; // 使用者手動調整過類型或科目（重新解析時保留）
   issues: string[];
   confirmed: boolean;
 }

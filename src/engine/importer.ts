@@ -238,6 +238,39 @@ export function reconcileSubtotals(y: YearData, custom: AccountDef[] = []) {
 
 import { fmtAmt as fmt } from './format';
 
+// 重新解析：以目前規則重算本年度各匯入（使用保存之原始資料），保留使用者手動調整之類型與科目
+export interface ReparseChange { label: string; before: string; after: string; kept: boolean }
+export function reparseYear(y: YearData, imports: RawImport[], custom: AccountDef[] = []): ReparseChange[] {
+  const name = (l: MappedLine) => (l.kind === 'detail' ? `明細／${l.account ? findAccount(l.account, custom)?.name ?? l.account : '未對應'}` : l.kind === 'subtotal' ? '合計（核對用）' : '略過');
+  const changes: ReparseChange[] = [];
+  const out: MappedLine[] = [];
+  for (const id of y.importIds) {
+    const raw = imports.find((r) => r.id === id);
+    const old = y.lines.filter((l) => l.importId === id);
+    if (!raw) { out.push(...old); continue; }
+    const fresh = buildLines(raw.rows, raw, raw.id, custom);
+    for (const nl of fresh) {
+      const ol = old.find((o) => o.rowIndex === nl.rowIndex);
+      const auto = name(nl);
+      if (ol?.userSet) {
+        // 使用者手動調整：保留（若與新規則結果不同則列入清單供檢查）
+        nl.kind = ol.kind;
+        remapLine(nl, ol.kind === 'detail' ? ol.account : null, raw, custom);
+        nl.note = undefined;
+        nl.userSet = true; nl.confirmed = ol.confirmed;
+        if (auto !== name(ol)) changes.push({ label: nl.label, before: name(ol), after: auto, kept: true });
+      } else if (ol) {
+        if (name(ol) !== name(nl)) changes.push({ label: nl.label, before: name(ol), after: name(nl), kept: false });
+        else nl.confirmed = ol.confirmed;
+      }
+      out.push(nl);
+    }
+  }
+  y.lines = out;
+  reconcileSubtotals(y, custom);
+  return changes;
+}
+
 // 同一年度已匯入之同類報表（或同一檔案之同一工作表）：重複匯入會使金額加倍
 export function duplicateImports(imports: RawImport[], y: YearData, cfg: { fileName: string; sheet: string; stmt: string }): RawImport[] {
   return imports.filter((im) => y.importIds.includes(im.id) && ((im.fileName === cfg.fileName && im.sheet === cfg.sheet) || (cfg.stmt !== 'TB' && im.stmt === cfg.stmt)));

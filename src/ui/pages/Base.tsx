@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useP, fmtVal, unitLabel } from '../ctx';
 import { NumInput } from '../Grid';
 import { allAccounts, SECTION_NAMES, Section, AccountDef, CfClass } from '../../engine/coa';
-import { SECTION_CHECKS, CHECK_LABEL, subtotalValue, readFile, SheetData, guessLayout, guessUnit, buildLines, duplicateImports, removeImportsFromYear, newRawImport, applyImport, remapLine, reconcileSubtotals, MapConfig, parseAmount } from '../../engine/importer';
+import { SECTION_CHECKS, CHECK_LABEL, subtotalValue, reparseYear, ReparseChange, readFile, SheetData, guessLayout, guessUnit, buildLines, duplicateImports, removeImportsFromYear, newRawImport, applyImport, remapLine, reconcileSubtotals, MapConfig, parseAmount } from '../../engine/importer';
 import { matchCfRow, CF_TOTAL_ROWS } from '../../engine/cfImport';
 
 const BS_IS_SHEET = /^(合併|個體)?(資產負債表|綜合損益表|損益表)（第/;
@@ -206,6 +206,7 @@ function acctOptions(custom: AccountDef[], stmt?: string) {
 function MappingTable({ y }: { y: YearData }) {
   const { p, update } = useP();
   const [onlyIssues, setOnlyIssues] = useState(false);
+  const [reparsed, setReparsed] = useState<ReparseChange[] | null>(null);
   if (!y.lines.length) return null;
   const imports = p.imports.filter((i) => y.importIds.includes(i.id));
   const yearIdx = (np: Project) => yearOf(np, y.year)!;
@@ -216,10 +217,22 @@ function MappingTable({ y }: { y: YearData }) {
       <h2>科目對應（{y.year}）</h2>
       <p className="muted small">來源：{imports.map((i) => `${i.fileName}／${i.sheet}（${{ BS: '資產負債表', IS: '綜合損益表', TB: '試算表' }[i.stmt]}，單位×${i.unitMultiplier}）`).join('；')}。原始資料完整保留於匯出檔「原始匯入資料」工作表。合計列僅用於核對，不計入明細。</p>
       <div className="row">
+        <button onClick={() => {
+          let ch: ReparseChange[] = [];
+          update((np) => { ch = reparseYear(yearIdx(np), np.imports, np.customAccounts); }, { action: '重新解析', detail: `${y.year} 年度：以最新規則重算 ${imports.length} 個匯入` });
+          setReparsed(ch);
+        }} title="使用已保存之原始匯入資料，以目前最新之辨識規則重算本年度科目對應；手動調整過之列予以保留">以最新規則重新解析</button>
         <label className="check"><input type="checkbox" checked={onlyIssues} onChange={(e) => setOnlyIssues(e.target.checked)} />只顯示待確認（{nIssues}）</label>
         <button onClick={() => update((np) => { yearIdx(np).lines.forEach((l) => { if (l.kind !== 'detail' || l.account) l.confirmed = true; }); }, { action: '確認科目對應', detail: `${y.year} 全部（未對應者除外）` })}>確認全部已對應項目</button>
         {imports.map((im) => <button key={im.id} className="danger mini" onClick={() => confirm(`移除匯入「${im.fileName}／${im.sheet}」？`) && update((np) => { const yd = yearIdx(np); yd.lines = yd.lines.filter((l) => l.importId !== im.id); yd.importIds = yd.importIds.filter((x) => x !== im.id); np.imports = np.imports.filter((x) => x.id !== im.id); reconcileSubtotals(yd, np.customAccounts); }, { action: '移除匯入', detail: im.fileName })}>移除 {im.sheet}</button>)}
       </div>
+      {reparsed && (
+        <div className="subcard">
+          <b>重新解析完成</b>{reparsed.length === 0 ? '：科目對應與先前相同。' : `：${reparsed.filter((c) => !c.kept).length} 列對應已依最新規則更新${reparsed.some((c) => c.kept) ? `，${reparsed.filter((c) => c.kept).length} 列保留您的手動調整` : ''}，請檢查。不滿意可按「復原」（Ctrl+Z）。`}
+          {reparsed.length > 0 && <table className="grid small"><thead><tr><th>列</th><th>先前</th><th>重新解析後</th></tr></thead><tbody>{reparsed.map((c, i) => <tr key={i}><td>{c.label}</td><td>{c.before}</td><td>{c.kept ? '保留手動調整' : c.after}</td></tr>)}</tbody></table>}
+          <button className="mini" onClick={() => setReparsed(null)}>關閉</button>
+        </div>
+      )}
       <table className="grid map">
         <thead><tr><th>列</th><th>原始科目</th><th>原始金額</th><th>認列金額（元）</th><th>類型</th><th>對應科目</th><th>問題</th><th>確認</th></tr></thead>
         <tbody>
@@ -232,13 +245,13 @@ function MappingTable({ y }: { y: YearData }) {
                 <td className="num">{l.rawAmount}</td>
                 <td className="num">{l.amount === null ? '—' : fmtVal(l.amount, 'amount', 'yuan')}</td>
                 <td>
-                  <select value={l.kind} onChange={(e) => update((np) => { const ln = yearIdx(np).lines[i]; ln.kind = e.target.value as any; remapLine(ln, ln.kind === 'detail' ? ln.account : null, im, np.customAccounts); reconcileSubtotals(yearIdx(np), np.customAccounts); }, { action: '修改對應類型', detail: `${l.label}：${e.target.value}` })}>
+                  <select value={l.kind} onChange={(e) => update((np) => { const ln = yearIdx(np).lines[i]; ln.userSet = true; ln.kind = e.target.value as any; remapLine(ln, ln.kind === 'detail' ? ln.account : null, im, np.customAccounts); reconcileSubtotals(yearIdx(np), np.customAccounts); }, { action: '修改對應類型', detail: `${l.label}：${e.target.value}` })}>
                     <option value="detail">明細</option><option value="subtotal">合計（核對用）</option><option value="ignore">略過</option>
                   </select>
                 </td>
                 <td>
                   {l.kind === 'detail' ? (
-                    <select className={l.account ? '' : 'missing'} value={l.account ?? ''} onChange={(e) => update((np) => { const ln = yearIdx(np).lines[i]; remapLine(ln, e.target.value || null, im, np.customAccounts); ln.confirmed = false; reconcileSubtotals(yearIdx(np), np.customAccounts); }, { action: '修改科目對應', detail: `${l.label} → ${e.target.value}` })}>
+                    <select className={l.account ? '' : 'missing'} value={l.account ?? ''} onChange={(e) => update((np) => { const ln = yearIdx(np).lines[i]; remapLine(ln, e.target.value || null, im, np.customAccounts); ln.userSet = true; ln.confirmed = false; reconcileSubtotals(yearIdx(np), np.customAccounts); }, { action: '修改科目對應', detail: `${l.label} → ${e.target.value}` })}>
                       <option value="">（未對應）</option>
                       {acctOptions(p.customAccounts, im?.stmt)}
                     </select>

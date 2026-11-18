@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildLines, parseAmount, guessLayout, applyImport, newRawImport, guessUnit } from '../src/engine/importer';
+import { buildLines, parseAmount, guessLayout, applyImport, newRawImport, guessUnit, remapLine } from '../src/engine/importer';
 import { emptyYear } from '../src/engine/project';
 
 const rows = [
@@ -111,5 +111,30 @@ describe('防止重複匯入', () => {
     expect(y.accounts.revenue).toBe(517_503);
     expect(y.accounts.other_gl).toBe(93);
     expect(y.lines.filter((l) => l.issues.length)).toEqual([]);
+  });
+});
+
+import { reparseYear } from '../src/engine/importer';
+describe('重新解析', () => {
+  it('以最新規則重算並保留手動調整', () => {
+    const rows = [['會計項目', '金額'], ['股本', '200,000'], ['保留盈餘', '66,120'], ['法定盈餘公積', '20,000'], ['特別盈餘公積', '1,120'], ['未分配盈餘', '45,000'], ['神秘準備', '500'], ['權益總計', '266,620']];
+    const cfg = { fileName: 'old.pdf', sheet: '資產負債表（第 5 頁）', stmt: 'BS' as const, year: 2025, currency: 'TWD', unitMultiplier: 1, signConvention: 'presentation' as const, headerRow: 0, labelCol: 0, amountCol: 1 };
+    const raw = newRawImport(cfg, rows);
+    const y = emptyYear(2025);
+    applyImport(y, raw, buildLines(rows, cfg, raw.id));
+    // 模擬舊版解析：保留盈餘列被當成明細（重複計入）
+    const re = y.lines.find((l) => l.label === '保留盈餘')!;
+    re.kind = 'detail'; re.account = 're'; re.note = undefined;
+    // 使用者手動將「神秘準備」對應至其他權益
+    const x = y.lines.find((l) => l.label === '神秘準備')!;
+    remapLine(x, 'other_eq', raw); x.userSet = true;
+    applyImport(y, raw, y.lines.filter((l) => l.importId === raw.id));
+    expect(y.accounts.re).toBe(132_240); // 重複計入
+    const ch = reparseYear(y, [raw]);
+    expect(y.accounts.re).toBe(66_120);
+    expect(y.accounts.other_eq).toBe(500);
+    expect(ch.find((c) => c.label === '保留盈餘')).toMatchObject({ before: '明細／保留盈餘', after: '合計（核對用）', kept: false });
+    expect(ch.find((c) => c.label === '神秘準備')).toMatchObject({ before: '明細／其他權益', kept: true });
+    expect(y.lines.find((l) => l.label === '權益總計')!.issues).toEqual([]);
   });
 });
