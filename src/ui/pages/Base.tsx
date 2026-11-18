@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useP, fmtVal, unitLabel } from '../ctx';
 import { NumInput } from '../Grid';
 import { allAccounts, SECTION_NAMES, Section, AccountDef, CfClass } from '../../engine/coa';
-import { readFile, SheetData, guessLayout, guessUnit, buildLines, duplicateImports, removeImportsFromYear, newRawImport, applyImport, remapLine, reconcileSubtotals, MapConfig, parseAmount } from '../../engine/importer';
+import { SECTION_CHECKS, CHECK_LABEL, subtotalValue, readFile, SheetData, guessLayout, guessUnit, buildLines, duplicateImports, removeImportsFromYear, newRawImport, applyImport, remapLine, reconcileSubtotals, MapConfig, parseAmount } from '../../engine/importer';
 import { matchCfRow, CF_TOTAL_ROWS } from '../../engine/cfImport';
 
 const BS_IS_SHEET = /^(合併|個體)?(資產負債表|綜合損益表|損益表)（第/;
@@ -263,18 +263,22 @@ function AccountSummary({ y }: { y: YearData }) {
   const sec = (s: Section) => accts.filter((a) => a.section === s);
   const total = (secs: Section[]) => secs.flatMap(sec).reduce((t, a) => t + (a.contra ? -1 : 1) * (yearAmount(y, a.code) ?? 0), 0);
   const assets = total(['CA', 'NCA']), le = total(['CL', 'NCL', 'EQ']);
+  // 即時小計：以手動輸入優先之科目金額計算；原表金額取手動輸入，否則取匯入之原表小計
+  const merged: Record<string, number | null> = Object.fromEntries(accts.map((a) => [a.code, yearAmount(y, a.code)]));
+  const importedRef = (ck: string) => { const l = y.lines.find((x) => x.kind === 'subtotal' && x.subtotalCheck === ck && x.amount !== null); return l ? l.amount : null; };
+  const refOf = (ck: string) => y.checkTotals?.[ck] ?? importedRef(ck);
   const required = ['cash', 'revenue', 'cogs'];
   const missingReq = required.filter((c) => yearAmount(y, c) === null);
   return (
     <section className="card">
       <h2>科目彙總與手動輸入（{y.year}）</h2>
-      <p className="muted small">「匯入合計」由對應明細加總；「手動輸入」可直接建檔或覆蓋匯入數（留白則採匯入數）。減項科目（累計折舊、累計減損、庫藏股）以正數輸入。</p>
+      <p className="muted small">「匯入合計」由對應明細加總；「手動輸入」可直接建檔或覆蓋匯入數（留白則採匯入數）。減項科目（累計折舊、累計減損、庫藏股）以正數輸入。各段下方之小計隨輸入即時更新；在小計列輸入原報表上的金額，即可逐段核對（已匯入者自動帶入原表小計）。</p>
       {missingReq.length > 0 && <p className="warn">缺少必要科目：{missingReq.map((c) => accts.find((a) => a.code === c)?.name).join('、')}</p>}
       <p className={Math.abs(assets - le) >= 1 ? 'error' : 'ok'}>資產合計 {fmtVal(assets, 'amount', 'yuan')}　負債及權益合計 {fmtVal(le, 'amount', 'yuan')}　{Math.abs(assets - le) >= 1 ? `差額 ${fmtVal(assets - le, 'amount', 'yuan')}（請檢查對應或漏列科目，系統不自動調整）` : '✓ 平衡'}</p>
       <div className="two-col">
         {(['BS', 'IS'] as const).map((stmt) => (
           <table key={stmt} className="grid">
-            <thead><tr><th>{stmt === 'BS' ? '資產負債表科目' : '綜合損益表科目'}</th><th>匯入合計</th><th>手動輸入</th></tr></thead>
+            <thead><tr><th>{stmt === 'BS' ? '資產負債表科目' : '綜合損益表科目'}</th><th>匯入合計／小計</th><th>手動輸入／原表金額</th></tr></thead>
             <tbody>
               {(Object.keys(SECTION_NAMES) as Section[]).filter((s) => accts.some((a) => a.section === s && a.stmt === stmt)).map((s) => (
                 [<tr key={s} className="header"><td colSpan={3}>{SECTION_NAMES[s]}</td></tr>,
@@ -284,7 +288,23 @@ function AccountSummary({ y }: { y: YearData }) {
                     <td className="num">{y.accounts[a.code] !== undefined ? fmtVal(y.accounts[a.code], 'amount', 'yuan') : <span className="na">未提供</span>}</td>
                     <td className="in"><NumInput amount value={y.manual[a.code] ?? null} onCommit={(v) => update((np) => { const yd = yi(np); if (v === null) delete yd.manual[a.code]; else yd.manual[a.code] = v; }, { action: '手動輸入基期科目', detail: `${y.year} ${a.name}：${v ?? '清除'}` })} /></td>
                   </tr>
-                ))]
+                )),
+                // 即時小計＋原表金額核對
+                ...(SECTION_CHECKS[s] ?? []).map((ck) => {
+                  const calc = subtotalValue(ck, merged, p.customAccounts) ?? 0;
+                  const ref = refOf(ck);
+                  const diff = ref === null ? null : Math.abs(calc) - Math.abs(ref);
+                  return (
+                    <tr key={`ck-${ck}`} className={['ASSETS', 'LIAB', 'LE', 'NI', 'CI'].includes(ck) ? 'total' : 'subtotal'}>
+                      <td>{CHECK_LABEL[ck]}</td>
+                      <td className="num">{fmtVal(calc, 'amount', 'yuan')}</td>
+                      <td className="ck-ref">
+                        <NumInput amount value={y.checkTotals?.[ck] ?? null} placeholder={importedRef(ck) !== null ? `原表 ${fmtVal(importedRef(ck)!, 'amount', 'yuan')}` : '輸入原表金額'} onCommit={(v) => update((np) => { const yd = yi(np); yd.checkTotals ??= {}; if (v === null) delete yd.checkTotals[ck]; else yd.checkTotals[ck] = v; })} />
+                        {diff === null ? null : Math.abs(diff) < 1 ? <span className="ck ok">✓ 相符</span> : <span className="ck bad">差額 {fmtVal(diff, 'amount', 'yuan')}</span>}
+                      </td>
+                    </tr>
+                  );
+                })]
               ))}
             </tbody>
           </table>

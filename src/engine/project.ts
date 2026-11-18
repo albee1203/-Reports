@@ -84,6 +84,7 @@ export interface YearData {
   importIds: string[];
   cfActual: Record<string, Num>; // 基期現金流量表實際數（選填）
   sceActual: Record<string, Num>; // 基期權益變動表實際數（選填）
+  checkTotals?: Record<string, Num>; // 手動輸入之原表小計（核對用）
 }
 
 export interface FaBase {

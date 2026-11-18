@@ -187,6 +187,17 @@ export function remapLine(l: MappedLine, account: string | null, imp: RawImport 
   l.issues = issues;
 }
 
+// 手動輸入核對用之小計：各段之後顯示（依原報表常見順序）
+export const SECTION_CHECKS: Partial<Record<string, string[]>> = {
+  CA: ['CA'], NCA: ['NCA', 'ASSETS'], CL: ['CL'], NCL: ['NCL', 'LIAB'], EQ: ['EQ', 'LE'],
+  COGS: ['GP'], OPEX: ['OPEX', 'OPINC'], NONOP: ['NONOP', 'PBT'], TAX: ['NI'], OCI: ['CI'],
+};
+export const CHECK_LABEL: Record<string, string> = {
+  CA: '流動資產合計', NCA: '非流動資產合計', ASSETS: '資產總計', CL: '流動負債合計', NCL: '非流動負債合計', LIAB: '負債總計',
+  EQ: '權益總計', LE: '負債及權益總計', GP: '營業毛利', OPEX: '營業費用合計', OPINC: '營業利益（損失）',
+  NONOP: '營業外收入及支出合計', PBT: '稅前淨利（淨損）', NI: '本期淨利（淨損）', CI: '本期綜合損益總額',
+};
+
 // 原表小計核對
 export function subtotalValue(check: string, acc: Record<string, Num>, custom: AccountDef[] = []): number | null {
   const all = allAccounts(custom);

@@ -236,3 +236,9 @@ table.grid.live-t th { font-size: 12px; padding: 3px 5px; }
 .live-open { float: right; }
 @media (min-width: 901px) { .app { grid-template-columns: 230px minmax(0, 1fr) auto auto; } }
 @media (max-width: 1400px) { .live, .live-open { display: none; } }
+
+/* 手動輸入：小計核對 */
+td.ck-ref { white-space: nowrap; background: #f7f9fc; }
+td.ck-ref .num-input input { width: 120px; }
+.ck { font-size: 12px; margin-left: 6px; font-weight: 600; }
+.ck.ok { color: var(--ok); } .ck.bad { color: var(--err); }
