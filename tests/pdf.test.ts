@@ -50,7 +50,8 @@ describe('PDF 財報匯入（文字型）', async () => {
   it('整本財報_114.pdf：自動找出報表頁、跨頁合併、排除封面／查核報告／目錄／附註', async () => {
     const sheets = itemsToSheets(await extractItems(pdfjs, load('tests/fixtures/整本財報_114.pdf')));
     const stmts = sheets.filter((x) => /（第/.test(x.name)).map((x) => x.name);
-    expect(stmts).toEqual(['資產負債表（第 4–5 頁）', '綜合損益表（第 6 頁）', '權益變動表（第 7 頁）', '現金流量表（第 8 頁）']);
+    // 目錄（無編號、含頁次欄）不得誤判；現金流量表第 9 頁無標題，視為續頁合併
+    expect(stmts).toEqual(['資產負債表（第 4–5 頁）', '綜合損益表（第 6 頁）', '權益變動表（第 7 頁）', '現金流量表（第 8–9 頁）']);
     for (const [name, stmt] of [['資產負債表（第 4–5 頁）', 'BS'], ['綜合損益表（第 6 頁）', 'IS']] as const) {
       const rows = sheets.find((x) => x.name === name)!.rows;
       for (const w of ['base', 'comp'] as const) {

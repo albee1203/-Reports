@@ -37,8 +37,8 @@ const path = require('node:path');
   const pages = [
     `<div class="cover"><h1>範例精密工業股份有限公司</h1><h2>財務報表暨會計師查核報告</h2><h3>民國114年度及113年度</h3><p>地址：臺北市○○區○○路100號</p><p>電話：(02)2700-0000</p></div>`,
     `<h2>會計師查核報告</h2>${para('範例精密工業股份有限公司　公鑒：')}${para('查核意見：範例精密工業股份有限公司民國114年及113年12月31日之資產負債表，暨民國114年及113年1月1日至12月31日之綜合損益表、權益變動表、現金流量表，以及財務報表附註（包括重大會計政策彙總），業經本會計師查核竣事。')}${para('依本會計師之意見，上開財務報表在所有重大方面係依照商業會計法及企業會計準則公報編製，足以允當表達範例精密工業股份有限公司民國114年及113年12月31日之財務狀況，暨民國114年及113年1月1日至12月31日之財務績效及現金流量。')}${para('會計師：王大明　民國115年3月15日')}`,
-    `<h2>目　　錄</h2>${table([['項目', '頁次'], ['一、封面', '1'], ['二、會計師查核報告', '2'], ['三、目錄', '3'], ['四、資產負債表', '4～5'], ['五、綜合損益表', '6'], ['六、權益變動表', '7'], ['七、現金流量表', '8'], ['八、財務報表附註', '9～10']], 'toc')}`,
-    table(bs1), table(bs2), table(IS_ROWS), table(SCE, 'sce'), table(CF, 'cf'),
+    `${table([['', '財務報告目錄', '', ''], ['', '項　　　　目', '', '頁　次'], ['', '會計師查核報告', '', '1~2'], ['', '資產負債表', '', '3~4'], ['', '綜合損益表', '', '5'], ['', '權益變動表', '', '6'], ['', '現金流量表', '', '7~8'], ['', '財務報表附註', '', ''], ['', '一、公司沿革', '', '9'], ['', '二、通過財務報告之日期及程序', '', '9'], ['', '三、重大會計政策之彙總說明', '', '9~12'], ['', '四、重大會計判斷、估計及假設不確定性之主要來源', '', '12'], ['', '五、重要會計項目之說明', '', '12~18'], ['', '六、關係人交易', '', '19']], 'toc')}`,
+    table(bs1), table(bs2), table(IS_ROWS), table(SCE, 'sce'), table(CF.slice(0, 21), 'cf'), table([['代碼', '項目', '', '114年度', '113年度'], ...CF.slice(21)], 'cf'),
     `<h2>範例精密工業股份有限公司　財務報表附註</h2>${para('一、公司沿革：本公司於民國85年設立，主要營業項目為精密零件之製造及銷售。')}${para('六、重要會計項目之說明')}${para('(一)現金及約當現金')}${table([['項目', '114年12月31日', '113年12月31日'], ['庫存現金', '200', '180'], ['銀行存款', '34,800', '29,820'], ['合計', '35,000', '30,000']], 'note')}`,
     `${para('(二)應收帳款')}${table([['項目', '114年12月31日', '113年12月31日'], ['應收帳款', '45,000', '40,800'], ['減：備抵損失', '(1,000)', '(800)'], ['淨額', '44,000', '40,000']], 'note')}${para('(三)存貨')}${table([['項目', '114年12月31日', '113年12月31日'], ['原料', '10,000', '9,000'], ['製成品', '20,000', '19,000'], ['合計', '30,000', '28,000']], 'note')}`,
   ];
@@ -46,7 +46,7 @@ const path = require('node:path');
     body{font-family:"Noto Sans CJK TC","Noto Sans TC",sans-serif;font-size:10pt} table{border-collapse:collapse;width:100%} td{padding:1px 6px}
     td.c3,td.c4,td.c5,td.c6{text-align:right} td.c0{width:46px} td.c1{width:220px} .pg{break-after:page} .cover{text-align:center;margin-top:200px}
     table.sce td.c2,table.sce td.c3,table.sce td.c4,table.sce td.c5,table.sce td.c6{text-align:right} table.cf td.c3,table.cf td.c4{text-align:right}
-    table.note{width:60%} table.note td:nth-child(n+2){text-align:right} table.toc{width:50%}
+    table.note{width:60%} table.note td:nth-child(n+2){text-align:right} table.toc{width:70%} table.toc td.c3{text-align:right}
   </style>${pages.map((p) => `<div class="pg">${p}</div>`).join('')}`;
   const b = await chromium.launch();
   const pg = await b.newPage();

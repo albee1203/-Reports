@@ -115,8 +115,10 @@ export function itemsToSheets(items: PdfItem[]): SheetData[] {
   for (const p of perPage) {
     const t = statementTitle(p.rows);
     const g = groups[groups.length - 1];
-    if (!t) continue;
-    if (g && g.title === t && g.pages[g.pages.length - 1] === p.pg - 1) { g.pages.push(p.pg); g.rows.push(...p.rows); }
+    const follows = g && g.pages[g.pages.length - 1] === p.pg - 1;
+    // 續頁：標題同名，或緊接報表頁之後、無標題但同為金額表格（附註頁除外）
+    if (!t) { if (follows && isContinuation(p.rows)) { g.pages.push(p.pg); g.rows.push(...p.rows); } continue; }
+    if (follows && g.title === t) { g.pages.push(p.pg); g.rows.push(...p.rows); }
     else groups.push({ title: t, pages: [p.pg], rows: [...p.rows] });
   }
   const stmtSheets = groups.map((g) => ({ name: `${g.title}（第 ${g.pages[0]}${g.pages.length > 1 ? `–${g.pages[g.pages.length - 1]}` : ''} 頁）`, rows: pad(g.rows) }));
@@ -127,7 +129,27 @@ export function itemsToSheets(items: PdfItem[]): SheetData[] {
 // 查核報告段落、目錄（如「四、資產負債表」）及附註不符合。
 // 報表名稱可獨立成格，或接在公司名稱之後（如「○○股份有限公司及子公司　合併資產負債表」）
 const TITLE_RE = /(合併|個體)?(資產負債表|綜合損益表|損益表|權益變動表|現金流量表)(（續）|\(續\))?$/;
+// 金額：含千分位、括號、「$」，或數值達 100 以上（排除目錄頁次、附註編號等小數字）
+const isAmountCell = (c: string) => {
+  const t = String(c ?? '').trim();
+  if (!NUMERIC.test(t) || !/\d/.test(t)) return false;
+  return /[,，()（）$＄]/.test(t) || Math.abs(Number(t.replace(/[^\d.]/g, ''))) >= 100;
+};
+const amountRowCount = (rows: string[][]) => rows.filter((r) => r.slice(2).some(isAmountCell)).length;
+const TOP = (rows: string[][]) => rows.slice(0, 8).flat().map((c) => String(c ?? '').replace(/[\s　]/g, ''));
+
+function isContinuation(rows: string[][]) {
+  const top = TOP(rows).join('');
+  if (/附註|說明|目錄|查核報告/.test(top)) return false;
+  return amountRowCount(rows) >= 6;
+}
+
 export function statementTitle(rows: string[][]): string | null {
+  const top = TOP(rows);
+  // 目錄頁：標示「目錄」，或頁首同時出現兩種以上報表名稱
+  if (top.some((c) => /目錄/.test(c))) return null;
+  const kinds = new Set(top.map((c) => c.match(/(資產負債表|損益表|權益變動表|現金流量表)$/)?.[1]).filter(Boolean));
+  if (kinds.size > 1) return null;
   let title: string | null = null;
   for (const r of rows.slice(0, 8)) {
     for (const c of r) {
@@ -140,8 +162,7 @@ export function statementTitle(rows: string[][]): string | null {
     if (title) break;
   }
   if (!title) return null;
-  const amountRows = rows.filter((r) => r.slice(2).some((c) => /\d/.test(c) && NUMERIC.test(String(c).trim()))).length;
-  return amountRows >= 6 ? title : null;
+  return amountRowCount(rows) >= 6 ? title : null;
 }
 
 export const STATEMENT_SHEET = /^(合併|個體)?(資產負債表|綜合損益表|損益表|權益變動表|現金流量表)（第/;
