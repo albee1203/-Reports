@@ -150,7 +150,8 @@ export function markGroupSubtotals(lines: MappedLine[], custom: AccountDef[] = [
         if (M.kind === 'ignore' && !M.rawAmount) break; // 遇到分類標題即停止
         if (!isDet(M)) break;
         sum += signed(M); k++;
-        if (k >= 2 && Math.abs(sum - target) < 1) { hit = true; break; }
+        // 2 列以上明細之加總；或僅 1 項明細（合計列在其正下方、同一科目、同金額，如「本期其他綜合損益」）
+        if ((k >= 2 || (dir < 0 && M.account && M.account === L.account)) && Math.abs(sum - target) < 1) { hit = true; break; }
         if (k > 12) break;
       }
       if (hit) {
