@@ -61,6 +61,17 @@ describe('基期現金流量表科目對應', () => {
 });
 
 import { parseSce, findHeaderRow, sceTotals } from '../src/engine/sceImport';
+import { matchMove } from '../src/engine/sceImport';
+describe('權益變動表列名辨識', () => {
+  it('以日期表示之期初、期末餘額', () => {
+    expect(matchMove('114年1月1日餘額')).toBe('open');
+    expect(matchMove('民國114年 1月 1日餘額')).toBe('open');
+    expect(matchMove('114年12月31日餘額')).toBe('close');
+    expect(matchMove('114年6月30日餘額')).toBe('close');
+    expect(matchMove('期初餘額')).toBe('open');
+  });
+});
+
 describe('基期權益變動表匯入', () => {
   it('矩陣格式解析、保留盈餘細項加總、盈餘公積提列互抵', () => {
     const rows = [

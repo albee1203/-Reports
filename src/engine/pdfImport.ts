@@ -9,7 +9,7 @@ const CJK = /[㐀-鿿豈-﫿]/;
 const NUMERIC = /^[(（\-－−△▲]?\s*[\d,，]+(\.\d+)?\s*[)）]?\s*%?$|^[-－—]$/;
 const CODE = /^[0-9X]{3,6}$/i;
 
-interface Token { str: string; x: number; r: number; y: number; h: number; page: number }
+interface Token { str: string; x: number; r: number; y: number; h: number; page: number; last?: string }
 
 // pdf.js 讀取（瀏覽器與測試環境各自傳入 pdf.js 模組）
 export async function extractItems(pdfjs: any, data: ArrayBuffer): Promise<PdfItem[]> {
@@ -64,14 +64,16 @@ function toRows(items: PdfItem[]): Token[][] {
       for (const it of g) {
         const t = toks[toks.length - 1];
         const gap = t ? it.x - t.r : Infinity;
-        const bothText = t && CJK.test(t.str) && CJK.test(it.str);
+        // 寬字距合併僅限單一中文字之間（如「資　　產」）；多字之詞（如「股本」「資本公積」）各自獨立
+        const single = (x: string) => x.trim().length === 1 && CJK.test(x);
+        const bothText = t && single(t.last ?? t.str) && single(it.str);
         // 一般相鄰字元合併；中文字詞允許較寬字距（如「資　　產」），但不跨越明顯欄距
         // 數字與數字（含表示零之「-」）之間只要有空隙即視為不同欄位，避免「800」與鄰欄「-」誤併為尾端負號「800-」
         const numLike = (x: string) => NUMERIC.test(x.trim()) || /^[-－—]$/.test(x.trim());
         const bothNum = t && numLike(t.str) && numLike(it.str);
         const join = t && (bothNum ? gap < 0.1 * it.h : gap < 0.35 * it.h || (bothText && gap < 2.2 * it.h));
-        if (join) { t.str += (gap > 0.6 * it.h && !bothText ? ' ' : '') + it.str; t.r = it.x + it.w; }
-        else toks.push({ str: it.str, x: it.x, r: it.x + it.w, y: it.y, h: it.h, page: pg });
+        if (join) { t.str += (gap > 0.6 * it.h && !bothText ? ' ' : '') + it.str; t.r = it.x + it.w; t.last = it.str; }
+        else toks.push({ str: it.str, x: it.x, r: it.x + it.w, y: it.y, h: it.h, page: pg, last: it.str });
       }
       for (const t of toks) t.str = t.str.replace(/\s+/g, (s) => (s.length > 1 ? ' ' : s)).trim();
       // 表頭文字尾端緊接之「%」（如「金額%」）拆為獨立欄
@@ -105,10 +107,39 @@ export function itemsToSheets(items: PdfItem[]): SheetData[] {
   const pages = [...new Set(items.map((i) => i.page))].sort((a, b) => a - b);
   const perPage = pages.map((pg) => ({ pg, rows: pageGrid(items.filter((i) => i.page === pg)) }));
   if (pages.length === 1) return [{ name: '第 1 頁', rows: perPage[0].rows }];
-  const width = Math.max(...perPage.map((p) => Math.max(0, ...p.rows.map((r) => r.length))));
-  const all = perPage.flatMap((p) => p.rows.map((r) => [...r, ...Array(Math.max(0, width - r.length)).fill('')]));
-  return [{ name: `全部頁面（${pages.length} 頁）`, rows: all }, ...perPage.map((p) => ({ name: `第 ${p.pg} 頁`, rows: p.rows }))];
+  const pad = (rows: string[][]) => { const w = Math.max(0, ...rows.map((r) => r.length)); return rows.map((r) => [...r, ...Array(w - r.length).fill('')]); };
+  const all = pad(perPage.flatMap((p) => p.rows));
+  // 整本財報：辨識報表頁並將跨頁之同一報表合併，排在最前面
+  const groups: { title: string; pages: number[]; rows: string[][] }[] = [];
+  for (const p of perPage) {
+    const t = statementTitle(p.rows);
+    const g = groups[groups.length - 1];
+    if (!t) continue;
+    if (g && g.title === t && g.pages[g.pages.length - 1] === p.pg - 1) { g.pages.push(p.pg); g.rows.push(...p.rows); }
+    else groups.push({ title: t, pages: [p.pg], rows: [...p.rows] });
+  }
+  const stmtSheets = groups.map((g) => ({ name: `${g.title}（第 ${g.pages[0]}${g.pages.length > 1 ? `–${g.pages[g.pages.length - 1]}` : ''} 頁）`, rows: pad(g.rows) }));
+  return [...stmtSheets, { name: `全部頁面（${pages.length} 頁）`, rows: all }, ...perPage.map((p) => ({ name: `第 ${p.pg} 頁`, rows: p.rows }))];
 }
+
+// 報表頁判斷：頁首有獨立一列為報表名稱（可含「合併／個體」及「（續）」），且至少 6 列含金額。
+// 查核報告段落、目錄（如「四、資產負債表」）及附註不符合。
+const TITLE_RE = /^(合併|個體)?(資產負債表|綜合損益表|損益表|權益變動表|現金流量表)(（續）|\(續\))?$/;
+export function statementTitle(rows: string[][]): string | null {
+  let title: string | null = null;
+  for (const r of rows.slice(0, 8)) {
+    for (const c of r) {
+      const m = String(c ?? '').replace(/[\s　]/g, '').match(TITLE_RE);
+      if (m) { title = `${m[1] ?? ''}${m[2]}`; break; }
+    }
+    if (title) break;
+  }
+  if (!title) return null;
+  const amountRows = rows.filter((r) => r.slice(2).some((c) => /\d/.test(c) && NUMERIC.test(String(c).trim()))).length;
+  return amountRows >= 6 ? title : null;
+}
+
+export const STATEMENT_SHEET = /^(合併|個體)?(資產負債表|綜合損益表|損益表|權益變動表|現金流量表)（第/;
 
 const HEADER_CODE = /^(代碼|代號|編號|科目代號|會計科目代號)\s*(.*)$/;
 
@@ -117,12 +148,17 @@ function pageGrid(items: PdfItem[]): string[][] {
   const isNum = (s: string) => NUMERIC.test(s.trim());
   // 每列：科目＝第一個含中文之詞；其前為代碼。表頭「代碼」與科目名稱相連時拆開
   const parsed = rows.map((toks) => {
-    const li = toks.findIndex((t) => CJK.test(t.str));
+    let li = toks.findIndex((t) => CJK.test(t.str));
     let label = li >= 0 ? { ...toks[li] } : null;
     const pre = li >= 0 ? toks.slice(0, li).map((t) => t.str) : [];
-    const rest = li >= 0 ? toks.slice(li + 1) : toks;
     const m = label?.str.match(HEADER_CODE);
-    if (label && m) { pre.push(m[1]); label = { ...label, str: m[2] }; }
+    if (label && m) {
+      pre.push(m[1]);
+      label = { ...label, str: m[2] };
+      // 「代碼」單獨成詞時，下一個中文詞（如「項目」「會計科目」）為科目欄標題
+      if (!m[2] && toks[li + 1] && CJK.test(toks[li + 1].str)) { li++; label = { ...toks[li] }; }
+    }
+    const rest = li >= 0 ? toks.slice(li + 1) : toks;
     return { toks, label, pre, rest };
   });
   const h = items.length ? items.reduce((t, i) => t + i.h, 0) / items.length : 10;

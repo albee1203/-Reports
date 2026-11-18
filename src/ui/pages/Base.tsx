@@ -4,6 +4,9 @@ import { NumInput } from '../Grid';
 import { allAccounts, SECTION_NAMES, Section, AccountDef, CfClass } from '../../engine/coa';
 import { readFile, SheetData, guessLayout, guessUnit, buildLines, newRawImport, applyImport, remapLine, reconcileSubtotals, MapConfig, parseAmount } from '../../engine/importer';
 import { matchCfRow, CF_TOTAL_ROWS } from '../../engine/cfImport';
+
+const BS_IS_SHEET = /^(合併|個體)?(資產負債表|綜合損益表|損益表)（第/;
+const pickSheet = (sheets: SheetData[], re: RegExp) => Math.max(0, sheets.findIndex((s) => re.test(s.name)));
 import { parseSce, findHeaderRow, sceTotals, COMP_LABEL, Comp, Move, TEMPLATE_ROWS, TEMPLATE_COLS } from '../../engine/sceImport';
 import { download } from '../store';
 import { Project, YearData, emptyYear, yearAmount, recomputeYearAccounts, uid } from '../../engine/project';
@@ -50,10 +53,11 @@ function ImportWizard({ year }: { year: number }) {
     setErr(''); setDone([]);
     try {
       const sheets = await readFile(f.name, await f.arrayBuffer());
-      // PDF：各頁報表不同（如第 1 頁資產負債表、第 2 頁損益表）時，預設由第 1 頁開始逐頁匯入
+      // PDF：已辨識出報表頁者，預設由資產負債表／綜合損益表開始；否則各頁報表不同時由第 1 頁開始
+      const bsIs = sheets.findIndex((x) => BS_IS_SHEET.test(x.name));
       const title = (sh: SheetData) => { const t = sh.rows.slice(0, 6).flat().join(''); return /損益表/.test(t) ? 'IS' : /資產負債表/.test(t) ? 'BS' : /現金流量表/.test(t) ? 'CF' : /權益變動表/.test(t) ? 'SCE' : ''; };
       const pages = sheets.filter((s) => /^第 \d+ 頁$/.test(s.name));
-      const start = sheets[0].name.startsWith('全部頁面') && new Set(pages.map(title).filter(Boolean)).size > 1 ? 1 : 0;
+      const start = bsIs >= 0 ? bsIs : sheets[0].name.startsWith('全部頁面') && new Set(pages.map(title).filter(Boolean)).size > 1 ? 1 : 0;
       setFile({ name: f.name, sheets }); setSheetIdx(start);
       applyGuess(sheets[start]);
     } catch (e: any) { setErr(e.message ?? String(e)); }
@@ -96,7 +100,11 @@ function ImportWizard({ year }: { year: number }) {
     const nd = [...done, sheet.name];
     setDone(nd);
     const pageMode = nd.some((n) => /^第 \d+ 頁$/.test(n));
-    const next = file.sheets.findIndex((s) => !nd.includes(s.name) && !(pageMode && s.name.startsWith('全部頁面')));
+    const stmtMode = nd.some((n) => BS_IS_SHEET.test(n));
+    // 整本財報：依序匯入資產負債表與綜合損益表，現金流量表及權益變動表請於下方專區匯入
+    const next = stmtMode
+      ? file.sheets.findIndex((s) => !nd.includes(s.name) && BS_IS_SHEET.test(s.name))
+      : file.sheets.findIndex((s) => !nd.includes(s.name) && !(pageMode && s.name.startsWith('全部頁面')));
     if (next >= 0) { setSheetIdx(next); applyGuess(file.sheets[next]); } else setFile(null);
   };
   const set = (k: string, v: any) => setCfg((c) => ({ ...c!, [k]: v }));
@@ -104,7 +112,7 @@ function ImportWizard({ year }: { year: number }) {
     <section className="card">
       <h2>匯入 Excel／CSV（{year} 年度）</h2>
       <label className="file">選擇檔案（.xlsx、.csv、.pdf）<input type="file" accept=".xlsx,.csv,.txt,.pdf" onChange={(e) => { if (e.target.files?.[0]) onFile(e.target.files[0]); e.target.value = ''; }} /></label>
-      <p className="hint">PDF 限電腦產生之文字型檔案（可在 PDF 中選取文字者）；每一頁視為一張工作表，跨頁報表可選「全部頁面」。掃描或拍照之 PDF 請改用 Excel 檔。</p>
+      <p className="hint">PDF 限電腦產生之文字型檔案（可在 PDF 中選取文字者）。整本財報可直接匯入：自動找出資產負債表、綜合損益表等報表頁（跨頁者自動合併），封面、查核報告、目錄及附註不會匯入。掃描或拍照之 PDF 請改用 Excel 檔。</p>
       {done.length > 0 && <p className="ok small">已匯入工作表：{done.join('、')}{file ? '；可繼續匯入下一張工作表，或按「完成」。' : '。'}</p>}
       {err && <p className="error">{err}</p>}
       {file && sheet && cfg && (
@@ -332,7 +340,7 @@ function CfImport() {
     sh.rows.forEach((r, i) => { if (i > L.headerRow && r[L.labelCol]) { const id = matchCfRow(String(r[L.labelCol]), cfRows); if (id) m[i] = id; } });
     setMap(m);
   };
-  const onFile = async (f: File) => { const sheets = await readFile(f.name, await f.arrayBuffer()); setFile({ name: f.name, sheets }); setSi(0); init(sheets[0]); };
+  const onFile = async (f: File) => { const sheets = await readFile(f.name, await f.arrayBuffer()); const k = pickSheet(sheets, /現金流量表（第/); setFile({ name: f.name, sheets }); setSi(k); init(sheets[k]); };
   const sums: Record<string, number> = {};
   const errors: string[] = [];
   for (const l of lines) {
@@ -394,8 +402,9 @@ function SceImport() {
   const [rowOv, setRowOv] = useState<Record<number, Move | null>>({});
   const keys = ['cap', 'cs', 'adv', 're', 'oe', 'ot'].filter((k) => g.byId.has(`sce:${k}_open`));
   const sheet = file?.sheets[si];
-  const init = (sh: SheetData) => { setHdr(findHeaderRow(sh.rows)); setLabelCol(0); setColOv({}); setRowOv({}); };
-  const onFile = async (f: File) => { const sheets = await readFile(f.name, await f.arrayBuffer()); setFile({ name: f.name, sheets }); setSi(0); init(sheets[0]); };
+  // 項目欄：中文最多之欄（PDF 第一欄常為代碼）
+  const init = (sh: SheetData) => { setHdr(findHeaderRow(sh.rows)); setLabelCol(guessLayout(sh.rows).labelCol); setColOv({}); setRowOv({}); };
+  const onFile = async (f: File) => { const sheets = await readFile(f.name, await f.arrayBuffer()); const k = pickSheet(sheets, /權益變動表（第/); setFile({ name: f.name, sheets }); setSi(k); init(sheets[k]); };
   const res = sheet ? parseSce(sheet.rows, hdr, labelCol, unit, colOv, rowOv) : null;
   const unsupported = res ? Object.keys(res.values).filter((id) => !g.byId.has(id)) : [];
   const bsClose = (k: string) => ev.num(`sce:${k}_close`, info.cb);
