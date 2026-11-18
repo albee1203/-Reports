@@ -226,6 +226,17 @@ export function reconcileSubtotals(y: YearData, custom: AccountDef[] = []) {
 
 import { fmtAmt as fmt } from './format';
 
+// 同一年度已匯入之同類報表（或同一檔案之同一工作表）：重複匯入會使金額加倍
+export function duplicateImports(imports: RawImport[], y: YearData, cfg: { fileName: string; sheet: string; stmt: string }): RawImport[] {
+  return imports.filter((im) => y.importIds.includes(im.id) && ((im.fileName === cfg.fileName && im.sheet === cfg.sheet) || (cfg.stmt !== 'TB' && im.stmt === cfg.stmt)));
+}
+
+export function removeImportsFromYear(y: YearData, ids: string[], custom: AccountDef[] = []) {
+  y.lines = y.lines.filter((l) => !ids.includes(l.importId));
+  y.importIds = y.importIds.filter((x) => !ids.includes(x));
+  reconcileSubtotals(y, custom);
+}
+
 export function applyImport(y: YearData, raw: RawImport, lines: MappedLine[], custom: AccountDef[] = []) {
   y.lines = [...y.lines.filter((l) => l.importId !== raw.id), ...lines];
   if (!y.importIds.includes(raw.id)) y.importIds.push(raw.id);

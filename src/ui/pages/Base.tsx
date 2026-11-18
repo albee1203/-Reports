@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useP, fmtVal, unitLabel } from '../ctx';
 import { NumInput } from '../Grid';
 import { allAccounts, SECTION_NAMES, Section, AccountDef, CfClass } from '../../engine/coa';
-import { readFile, SheetData, guessLayout, guessUnit, buildLines, newRawImport, applyImport, remapLine, reconcileSubtotals, MapConfig, parseAmount } from '../../engine/importer';
+import { readFile, SheetData, guessLayout, guessUnit, buildLines, duplicateImports, removeImportsFromYear, newRawImport, applyImport, remapLine, reconcileSubtotals, MapConfig, parseAmount } from '../../engine/importer';
 import { matchCfRow, CF_TOTAL_ROWS } from '../../engine/cfImport';
 
 const BS_IS_SHEET = /^(合併|個體)?(資產負債表|綜合損益表|損益表)（第/;
@@ -107,10 +107,17 @@ function ImportWizard({ year }: { year: number }) {
       `已匯入「${sheet.name}」：${withAmt.length} 列有金額，其中 ${mapped.length} 列已自動對應科目${withAmt.length - mapped.length ? `，${withAmt.length - mapped.length} 列待指定科目（見下方「科目對應」）` : ''}。`,
       ...(bad.length ? [`⚠ 原表合計核對有 ${bad.length} 項不符（${bad.slice(0, 3).map((l) => l.label).join('、')}${bad.length > 3 ? ' 等' : ''}），請檢查「金額欄」是否正確，或至下方「科目對應」確認各列金額。`] : ['✓ 原表合計核對相符。']),
     ] });
+    // 防止重複匯入：同年度已有同類報表時詢問是否取代（同檔同工作表直接取代）
+    const STMT_NAME: Record<string, string> = { BS: '資產負債表', IS: '綜合損益表', TB: '試算表' };
+    const dupBase = duplicateImports(p.imports, yearOf(p, year)!, full);
+    const sameSheet = dupBase.every((d) => d.fileName === full.fileName && d.sheet === full.sheet);
+    if (dupBase.length && !sameSheet && !confirm(`${year} 年度已匯入過${STMT_NAME[full.stmt] ?? '同類報表'}（${dupBase.map((d) => `${d.fileName}／${d.sheet}`).join('、')}）。\n\n按「確定」以本次匯入取代先前的匯入；按「取消」則不匯入（兩者並存會使金額重複計入）。`)) return;
     update((np) => {
       const raw = newRawImport(full, sheet.rows);
       np.imports.push(raw);
       const yd = yearOf(np, year)!;
+      const old = duplicateImports(np.imports.filter((x) => x.id !== raw.id), yd, full).map((x) => x.id);
+      if (old.length) removeImportsFromYear(yd, old, np.customAccounts);
       applyImport(yd, raw, buildLines(sheet.rows, full, raw.id, np.customAccounts), np.customAccounts);
       // 同一張表之前期金額欄 → 前期比較年度（基期維持不變）
       if (comp.col !== null && comp.year !== year && comp.year !== np.base.year) {
@@ -119,6 +126,8 @@ function ImportWizard({ year }: { year: number }) {
         np.imports.push(raw2);
         let cy = np.comparatives.find((c) => c.year === comp.year);
         if (!cy) { cy = emptyYear(comp.year); np.comparatives.push(cy); }
+        const oldC = duplicateImports(np.imports.filter((x) => x.id !== raw2.id), cy, fc).map((x) => x.id);
+        if (oldC.length) removeImportsFromYear(cy, oldC, np.customAccounts);
         applyImport(cy, raw2, buildLines(sheet.rows, fc, raw2.id, np.customAccounts), np.customAccounts);
       }
     }, { action: '匯入財報', detail: `${file.name}／${sheet.name}／${cfg.stmt}／${year}${comp.col !== null ? `＋前期 ${comp.year}` : ''}` });

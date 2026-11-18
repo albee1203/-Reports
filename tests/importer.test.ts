@@ -87,3 +87,24 @@ describe('小計列自動辨識', () => {
     expect(y.lines.filter((l) => l.kind !== 'ignore' && l.issues.length)).toEqual([]);
   });
 });
+
+import { duplicateImports, removeImportsFromYear } from '../src/engine/importer';
+describe('防止重複匯入', () => {
+  it('同年度再次匯入損益表時取代先前匯入，金額不加倍', () => {
+    const rows = [['項目', '金額'], ['營業收入', '517,503'], ['營業成本', '(368,950)'], ['營業毛利', '148,553'], ['其他營業外收益及費損', '93'], ['營業外收益及費損合計', '93']];
+    const y = emptyYear(2025);
+    const imports: any[] = [];
+    for (const name of ['a.pdf', 'b.pdf']) {
+      const cfg = { fileName: name, sheet: '綜合損益表（第 6 頁）', stmt: 'IS' as const, year: 2025, currency: 'TWD', unitMultiplier: 1, signConvention: 'presentation' as const, headerRow: 0, labelCol: 0, amountCol: 1 };
+      const raw = newRawImport(cfg, rows);
+      const dup = duplicateImports(imports, y, cfg);
+      if (name === 'b.pdf') expect(dup.length).toBe(1);
+      removeImportsFromYear(y, dup.map((d) => d.id));
+      imports.push(raw);
+      applyImport(y, raw, buildLines(rows, cfg, raw.id));
+    }
+    expect(y.accounts.revenue).toBe(517_503);
+    expect(y.accounts.other_gl).toBe(93);
+    expect(y.lines.filter((l) => l.issues.length)).toEqual([]);
+  });
+});
