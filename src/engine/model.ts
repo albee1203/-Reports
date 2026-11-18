@@ -3,7 +3,7 @@ import {
   Cell, Column, Expr, Graph, Row, RowFormat, Value,
   add, div, eq, fn, iff, makeGraph, max, min, mul, n, neg, r, range, s, sub, sum, cmp,
 } from './graph';
-import { AccountDef, FA_CLASSES, allAccounts } from './coa';
+import { AccountDef, FA_CLASSES, allAccounts, OPEX_CODES } from './coa';
 import { M, Project, Scenario, YearData, yearAmount, Num } from './project';
 
 export const SH = {
@@ -122,7 +122,7 @@ export function buildGraph(p: Project, sc: Scenario): { g: Graph; info: ModelInf
   irow(SH.assump, 'a:gm', '毛利率', 'pct', A.gm, 'a.gm', { required: true, base: (c) => sub(n(1), div(AC('cogs', c), rev0(c))) });
   irow(SH.assump, 'a:depIn', '毛利率／費用率是否已含折舊', 'text', A.depIncluded, 'a.depIncluded', { required: true, options: [M.DEP_IN, M.DEP_EX] });
   irow(SH.assump, 'a:depShare', '折舊分攤至營業成本比率', 'pct', A.depCogsShare, 'a.depCogsShare', { required: true });
-  const opexCodes = ['sell_exp', 'admin_exp', 'rd_exp', 'other_opex'].filter((c) => A.opex[c]);
+  const opexCodes = OPEX_CODES.filter((c) => A.opex[c]);
   for (const c of opexCodes) {
     const name = accts.find((a) => a.code === c)!.name;
     irow(SH.assump, `a:opex:${c}`, `${name}占營收比率`, 'pct', A.opex[c], `a.opex.${c}`, { required: true, base: (col) => div(AC(c, col), rev0(col)) });

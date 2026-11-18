@@ -107,7 +107,8 @@ export function buildLines(rows: string[][], cfg: MapConfig, importId: string, c
     if (label && !raw) { lines.push({ importId, rowIndex: i, label, rawAmount: '', amount: null, account: null, kind: 'ignore', issues: [], confirmed: true }); continue; }
     // 金額欄為中文（如表頭「114年12月31日 金額」）：表頭或標題列，略過
     if (/[\u4e00-\u9fff]/.test(raw.replace(/元/g, ''))) { lines.push({ importId, rowIndex: i, label, rawAmount: raw, amount: null, account: null, kind: 'ignore', issues: [], confirmed: true }); continue; }
-    if (!label) { lines.push({ importId, rowIndex: i, label: '（無科目名稱）', rawAmount: raw, amount: null, account: null, kind: 'ignore', issues: ['無科目名稱，已略過'], confirmed: false }); continue; }
+    // 無科目名稱：有金額者提示；否則（如簽名線「— —」）直接略過
+    if (!label) { const has = /\d/.test(raw); lines.push({ importId, rowIndex: i, label: '（無科目名稱）', rawAmount: raw, amount: null, account: null, kind: 'ignore', issues: has ? ['無科目名稱，已略過'] : [], confirmed: !has }); continue; }
     const issues: string[] = [];
     const pa = parseAmount(raw);
     if (pa.error) issues.push(pa.error);
@@ -129,7 +130,45 @@ export function buildLines(rows: string[][], cfg: MapConfig, importId: string, c
     }
     lines.push({ importId, rowIndex: i, label, rawAmount: raw, amount, account, kind: 'detail', issues, confirmed: false });
   }
+  markGroupSubtotals(lines, custom);
   return lines;
+}
+
+// 小計列：金額等於緊接其下（或其上）2 列以上明細之加總（減項以負數計）者，
+// 如「保留盈餘」＝法定盈餘公積＋特別盈餘公積＋未分配盈餘、「股本」＝普通股股本＋…，僅供核對，避免重複計入
+export function markGroupSubtotals(lines: MappedLine[], custom: AccountDef[] = []) {
+  const signed = (l: MappedLine) => (l.amount ?? 0) * (l.account && findAccount(l.account, custom)?.contra ? -1 : 1);
+  const isDet = (l?: MappedLine) => !!l && l.kind === 'detail' && l.amount !== null;
+  for (let i = 0; i < lines.length; i++) {
+    const L = lines[i];
+    if (!isDet(L) || !L.amount) continue;
+    const target = signed(L);
+    for (const dir of [1, -1]) {
+      let sum = 0, k = 0, hit = false;
+      for (let j = i + dir; j >= 0 && j < lines.length; j += dir) {
+        const M = lines[j];
+        if (M.kind === 'ignore' && !M.rawAmount) break; // 遇到分類標題即停止
+        if (!isDet(M)) break;
+        sum += signed(M); k++;
+        if (k >= 2 && Math.abs(sum - target) < 1) { hit = true; break; }
+        if (k > 12) break;
+      }
+      if (hit) {
+        const comps = Array.from({ length: k }, (_, n) => lines[i + dir * (n + 1)]);
+        if (comps.every((c) => c.account)) {
+          // 明細皆已對應：保留明細，合計列僅供核對
+          L.kind = 'subtotal'; L.subtotalCheck = null; L.account = null;
+          L.issues = L.issues.filter((x) => !x.startsWith('未對應') && !x.startsWith('借貸符號'));
+          L.note = `金額等於${dir > 0 ? '下' : '上'}方 ${k} 列明細之合計，判定為小計列（僅供核對，不計入）`;
+        } else {
+          // 明細有未對應者（如「備抵損失」）：保留合計（淨額），明細略過
+          for (const c of comps) { c.kind = 'ignore'; c.issues = []; c.confirmed = true; c.note = `已由「${L.label}」合計列示，不重複計入`; }
+          L.note = `為${dir > 0 ? '下' : '上'}方 ${k} 列明細之合計（淨額），以本列計入`;
+        }
+        break;
+      }
+    }
+  }
 }
 
 // 重新對應某列後重新計算符號與問題

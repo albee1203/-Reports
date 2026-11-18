@@ -235,7 +235,7 @@ function MappingTable({ y }: { y: YearData }) {
                     </select>
                   ) : <span className="muted">{l.subtotalCheck ? '核對用' : ''}</span>}
                 </td>
-                <td className="issues">{l.issues.map((x, k) => <div key={k}>⚠ {x}</div>)}</td>
+                <td className="issues">{l.note && <div className="muted">ⓘ {l.note}</div>}{l.issues.map((x, k) => <div key={k}>⚠ {x}</div>)}</td>
                 <td><input type="checkbox" checked={l.confirmed} onChange={(e) => update((np) => { yearIdx(np).lines[i].confirmed = e.target.checked; })} /></td>
               </tr>
             );

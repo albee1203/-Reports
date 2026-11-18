@@ -52,3 +52,38 @@ describe('importer', () => {
     expect(y.accounts.re).toBe(-2_000_000);
   });
 });
+
+describe('小計列自動辨識', () => {
+  const run = (rows: string[][], stmt: 'BS' | 'IS' = 'BS') => {
+    const cfg = { fileName: 't', sheet: 's', stmt, year: 2025, currency: 'TWD', unitMultiplier: 1, signConvention: 'presentation' as const, headerRow: 0, labelCol: 0, amountCol: 1 };
+    const raw = newRawImport(cfg, rows);
+    const y = emptyYear(2025);
+    applyImport(y, raw, buildLines(rows, cfg, raw.id));
+    return y;
+  };
+  it('保留盈餘列（其下為法定、特別、未分配）不重複計入', () => {
+    const y = run([['會計項目', '金額'], ['股本', '200,000'], ['保留盈餘', '66,120'], ['法定盈餘公積', '20,000'], ['特別盈餘公積', '1,120'], ['未分配盈餘', '45,000'], ['其他權益', '2,000'], ['權益總計', '268,120']]);
+    expect(y.accounts.re).toBe(66_120);
+    expect(y.lines.find((l) => l.label === '保留盈餘')!.kind).toBe('subtotal');
+    expect(y.lines.find((l) => l.label === '權益總計')!.issues).toEqual([]);
+  });
+  it('應收帳款減備抵損失（明細有未對應者）：保留淨額', () => {
+    const y = run([['會計項目', '金額'], ['現金', '5,000'], ['應收帳款', '45,000'], ['減：備抵損失', '(1,000)'], ['應收帳款淨額', '44,000'], ['存貨', '3,000'], ['流動資產合計', '52,000']]);
+    expect(y.accounts.ar).toBe(44_000);
+    expect(y.lines.filter((l) => l.kind === 'detail' && !l.account)).toEqual([]);
+    expect(y.lines.find((l) => l.label === '流動資產合計')!.issues).toEqual([]);
+  });
+  it('不動產、廠房及設備＝成本－累計折舊：保留成本與累計折舊', () => {
+    const y = run([['會計項目', '金額'], ['房屋及建築', '50,000'], ['累計折舊－房屋及建築', '(15,000)'], ['不動產、廠房及設備淨額', '35,000'], ['無形資產', '1,000'], ['非流動資產合計', '36,000']]);
+    expect(y.accounts.ppe_cost).toBe(50_000);
+    expect(y.accounts.ppe_accdep).toBe(15_000);
+    expect(y.accounts.ppe_net).toBeUndefined();
+    expect(y.lines.find((l) => l.label === '非流動資產合計')!.issues).toEqual([]);
+  });
+  it('僅列營業費用總額、採權益法認列之投資損益', () => {
+    const y = run([['項目', '金額'], ['營業收入', '517,503'], ['營業成本', '(368,950)'], ['營業毛利', '148,553'], ['營業費用(附註三)', '(106,030)'], ['營業利益', '42,523'], ['採權益法認列之投資損益(附註五(四))', '8,575']], 'IS');
+    expect(y.accounts.opex_total).toBe(106_030);
+    expect(y.accounts.other_gl).toBe(8_575);
+    expect(y.lines.filter((l) => l.kind !== 'ignore' && l.issues.length)).toEqual([]);
+  });
+});

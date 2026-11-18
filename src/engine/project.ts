@@ -1,5 +1,5 @@
 // 專案、情境、假設資料模型
-import { AccountDef, DEFAULT_COA, FA_CLASSES, CfClass, findAccount } from './coa';
+import { AccountDef, DEFAULT_COA, FA_CLASSES, CfClass, findAccount, OPEX_CODES } from './coa';
 
 export type Num = number | null;
 export type Arr = Num[];
@@ -71,6 +71,7 @@ export interface MappedLine {
   account: string | null; // null = 未對應
   kind: 'detail' | 'subtotal' | 'ignore';
   subtotalCheck?: string | null;
+  note?: string; // 說明（非問題，如自動判定為小計列）
   issues: string[];
   confirmed: boolean;
 }
@@ -270,7 +271,7 @@ export function syncScenarioWithBase(p: Project, sc: Scenario) {
   // 舊版專案資料補欄位
   if (!sc.a.equity.capCash) sc.a.equity.capCash = arr(n);
   const has = (c: string) => { const v = yearAmount(base, c); return v !== null && v !== 0; };
-  for (const c of ['sell_exp', 'admin_exp', 'rd_exp', 'other_opex']) if ((has(c) || p.customAccounts.some((a) => a.code === c)) && !sc.a.opex[c]) sc.a.opex[c] = arr(n);
+  for (const c of OPEX_CODES) if ((has(c) || p.customAccounts.some((a) => a.code === c)) && !sc.a.opex[c]) sc.a.opex[c] = arr(n);
   const others = [...DEFAULT_COA, ...p.customAccounts].filter((a) => a.role === 'other');
   for (const a of others) {
     const relevant = has(a.code) || a.custom || p.comparatives.some((y) => { const v = yearAmount(y, a.code); return v !== null && v !== 0; });

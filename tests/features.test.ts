@@ -124,3 +124,23 @@ describe('減資與轉增資', () => {
     }
   });
 });
+
+import { syncScenarioWithBase, arr as arr2 } from '../src/engine/project';
+describe('營業費用僅列總額', () => {
+  it('opex_total 參與推估且四表平衡', () => {
+    const p = sampleProject();
+    const m = p.base.manual;
+    m.opex_total = (m.sell_exp ?? 0) + (m.admin_exp ?? 0) + (m.rd_exp ?? 0);
+    delete m.sell_exp; delete m.admin_exp; delete m.rd_exp;
+    const sc = p.scenarios[0];
+    sc.a.opex = {};
+    syncScenarioWithBase(p, sc);
+    expect(Object.keys(sc.a.opex)).toEqual(['opex_total']);
+    sc.a.opex.opex_total = arr2(5, 0.133);
+    const { g, info } = buildGraph(p, sc);
+    const ev = evaluate(g);
+    expect(g.byId.get('a:opex:opex_total')!.label).toBe('營業費用占營收比率');
+    expect(ev.num('is:opex', info.cb + 1)).toBeCloseTo(ev.num('is:rev', info.cb + 1) * 0.133, 0);
+    for (const c of info.fcols) for (const id of ['ck:bs', 'ck:cash', 'ck:eq']) expect(Math.abs(ev.num(id, c))).toBeLessThan(0.5);
+  });
+});

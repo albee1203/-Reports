@@ -1,12 +1,12 @@
 import { useP, unitLabel } from '../ctx';
 import { NumInput } from '../Grid';
-import { allAccounts } from '../../engine/coa';
+import { allAccounts, OPEX_CODES } from '../../engine/coa';
 
 export function SettingsPage() {
   const { p, update, info } = useP();
   const s = p.settings;
   const set = (k: string, v: any, label: string) => update((np) => { (np.settings as any)[k] = v; }, { action: '修改專案設定', detail: `${label}：${v}` });
-  const opexCodes = ['sell_exp', 'admin_exp', 'rd_exp', 'other_opex'];
+  const opexCodes = OPEX_CODES;
   const accts = allAccounts(p.customAccounts);
   return (
     <div>

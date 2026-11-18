@@ -80,9 +80,11 @@ export const DEFAULT_COA: AccountDef[] = [
   A('admin_exp', '管理費用', 'IS', 'OPEX', 'engine', ['管理費用', '管理及總務費用', '一般管理']),
   A('rd_exp', '研究發展費用', 'IS', 'OPEX', 'engine', ['研究發展費用', '研發費用']),
   A('other_opex', '其他營業費用', 'IS', 'OPEX', 'engine', ['其他營業費用', '預期信用減損']),
+  // 報表僅列營業費用總額（明細於附註）時使用
+  A('opex_total', '營業費用', 'IS', 'OPEX', 'engine', ['營業費用']),
   A('int_income', '利息收入', 'IS', 'NONOP', 'other', ['利息收入']),
   A('other_income', '其他收入', 'IS', 'NONOP', 'other', ['其他收入', '租金收入', '股利收入', '營業外收入']),
-  A('other_gl', '其他利益及損失', 'IS', 'NONOP', 'other', ['其他利益及損失', '兌換', '處分', '其他損失', '營業外支出', '其他利益', '採用權益法認列', '關聯企業損益之份額'], { canBeNegative: true }),
+  A('other_gl', '其他利益及損失', 'IS', 'NONOP', 'other', ['其他利益及損失', '兌換', '處分', '其他損失', '營業外支出', '其他利益', '採用權益法認列', '採權益法認列', '權益法認列之', '關聯企業損益之份額'], { canBeNegative: true }),
   A('fin_cost', '財務成本', 'IS', 'NONOP', 'engine', ['財務成本', '利息費用', '利息支出']),
   A('tax_exp', '所得稅費用', 'IS', 'TAX', 'engine', ['所得稅費用', '所得稅']),
   A('oci', '其他綜合損益（稅後淨額）', 'IS', 'OCI', 'engine', ['其他綜合損益', '確定福利計畫之再衡量數', '財務報表換算之兌換差額', '不重分類至損益', '重分類至損益之項目', '透過其他綜合損益按公允價值衡量'], { canBeNegative: true }),
@@ -108,6 +110,9 @@ export const SUBTOTAL_PATTERNS: { re: RegExp; check: string }[] = [
   { re: /每股盈餘|每股/, check: 'EPS' },
   { re: /(合計|總計|小計)$/, check: 'OTHER' },
 ];
+
+// 營業費用科目（推估時各自設定占營收比率）
+export const OPEX_CODES = ['sell_exp', 'admin_exp', 'rd_exp', 'other_opex', 'opex_total'];
 
 export const FA_CLASSES: { key: string; name: string; depreciable: boolean; cip?: boolean }[] = [
   { key: 'land', name: '土地', depreciable: false },
