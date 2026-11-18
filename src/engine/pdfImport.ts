@@ -6,7 +6,8 @@ export interface PdfItem { str: string; x: number; y: number; w: number; h: numb
 
 const CJK = /[㐀-鿿豈-﫿]/;
 // 金額或比率：可含括號、負號、千分位、小數、%；單獨之「-」視為零
-const NUMERIC = /^[(（\-－−△▲]?\s*[\d,，]+(\.\d+)?\s*[)）]?\s*%?$|^[-－—]$/;
+// 可含「$」「NT$」前綴（會計師報告首列及合計列慣例）
+const NUMERIC = /^(NT)?[$＄]?\s*[(（\-－−△▲]?\s*(NT)?[$＄]?\s*[\d,，]+(\.\d+)?\s*[)）]?\s*%?$|^[-－—]$/;
 const CODE = /^[0-9X]{3,6}$/i;
 
 interface Token { str: string; x: number; r: number; y: number; h: number; page: number; last?: string }
@@ -124,12 +125,16 @@ export function itemsToSheets(items: PdfItem[]): SheetData[] {
 
 // 報表頁判斷：頁首有獨立一列為報表名稱（可含「合併／個體」及「（續）」），且至少 6 列含金額。
 // 查核報告段落、目錄（如「四、資產負債表」）及附註不符合。
-const TITLE_RE = /^(合併|個體)?(資產負債表|綜合損益表|損益表|權益變動表|現金流量表)(（續）|\(續\))?$/;
+// 報表名稱可獨立成格，或接在公司名稱之後（如「○○股份有限公司及子公司　合併資產負債表」）
+const TITLE_RE = /(合併|個體)?(資產負債表|綜合損益表|損益表|權益變動表|現金流量表)(（續）|\(續\))?$/;
 export function statementTitle(rows: string[][]): string | null {
   let title: string | null = null;
   for (const r of rows.slice(0, 8)) {
     for (const c of r) {
-      const m = String(c ?? '').replace(/[\s　]/g, '').match(TITLE_RE);
+      const txt = String(c ?? '').replace(/[\s　]/g, '');
+      // 排除目錄條目（如「四、資產負債表」）及長句（查核報告段落）
+      if (txt.length > 40 || /^[一二三四五六七八九十0-9]+[、.]/.test(txt) || /目錄/.test(txt)) continue;
+      const m = txt.match(TITLE_RE);
       if (m) { title = `${m[1] ?? ''}${m[2]}`; break; }
     }
     if (title) break;

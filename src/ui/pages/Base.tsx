@@ -49,8 +49,9 @@ function ImportWizard({ year }: { year: number }) {
   const [comp, setComp] = useState<{ col: number | null; year: number }>({ col: null, year: year - 1 });
   const [detected, setDetected] = useState<string[]>([]);
   const [done, setDone] = useState<string[]>([]); // 本檔已匯入之工作表
+  const [result, setResult] = useState<{ ok: boolean; lines: string[] } | null>(null);
   const onFile = async (f: File) => {
-    setErr(''); setDone([]);
+    setErr(''); setDone([]); setResult(null);
     try {
       const sheets = await readFile(f.name, await f.arrayBuffer());
       // PDF：已辨識出報表頁者，預設由資產負債表／綜合損益表開始；否則各頁報表不同時由第 1 頁開始
@@ -60,6 +61,10 @@ function ImportWizard({ year }: { year: number }) {
       const start = bsIs >= 0 ? bsIs : sheets[0].name.startsWith('全部頁面') && new Set(pages.map(title).filter(Boolean)).size > 1 ? 1 : 0;
       setFile({ name: f.name, sheets }); setSheetIdx(start);
       applyGuess(sheets[start]);
+      if (/\.pdf$/i.test(f.name)) {
+        const found = sheets.filter((x) => /（第 /.test(x.name)).map((x) => x.name);
+        setDetected((d) => [...d, found.length ? `PDF 已辨識報表：${found.join('、')}` : `⚠ PDF 共 ${pages.length || 1} 頁，未自動辨識出報表頁；請於「工作表」選擇報表所在之頁，並對照下方預覽確認「金額欄」`]);
+      }
     } catch (e: any) { setErr(e.message ?? String(e)); }
   };
   // 自動辨識版面、金額單位、報表類型與年度欄
@@ -81,6 +86,20 @@ function ImportWizard({ year }: { year: number }) {
   const doImport = () => {
     if (!file || !sheet || !cfg) return;
     const full: MapConfig = { ...cfg, fileName: file.name, sheet: sheet.name, year };
+    // 先試算：完全沒有讀到金額時不匯入，並提示原因
+    const trial = buildLines(sheet.rows, full, 'trial', p.customAccounts).filter((l) => l.kind === 'detail');
+    const withAmt = trial.filter((l) => l.amount !== null);
+    const mapped = withAmt.filter((l) => l.account);
+    if (!withAmt.length) {
+      setResult({ ok: false, lines: [
+        `「${sheet.name}」沒有讀到任何金額，尚未匯入。請檢查：`,
+        '1. 「金額欄」是否選到金額所在的欄（下拉選單會顯示各欄標題，可對照下方預覽）。',
+        '2. 「工作表」是否選到報表所在的頁面（PDF 整本財報請選「資產負債表（第…頁）」等報表）。',
+        '3. 「標題列」是否設在表頭那一列；標題列以上的資料不會匯入。',
+      ] });
+      return;
+    }
+    setResult({ ok: true, lines: [`已匯入「${sheet.name}」：${withAmt.length} 列有金額，其中 ${mapped.length} 列已自動對應科目${withAmt.length - mapped.length ? `，${withAmt.length - mapped.length} 列待指定科目（見下方「科目對應」）` : ''}。`] });
     update((np) => {
       const raw = newRawImport(full, sheet.rows);
       np.imports.push(raw);
@@ -113,6 +132,7 @@ function ImportWizard({ year }: { year: number }) {
       <h2>匯入 Excel／CSV（{year} 年度）</h2>
       <label className="file">選擇檔案（.xlsx、.csv、.pdf）<input type="file" accept=".xlsx,.csv,.txt,.pdf" onChange={(e) => { if (e.target.files?.[0]) onFile(e.target.files[0]); e.target.value = ''; }} /></label>
       <p className="hint">PDF 限電腦產生之文字型檔案（可在 PDF 中選取文字者）。整本財報可直接匯入：自動找出資產負債表、綜合損益表等報表頁（跨頁者自動合併），封面、查核報告、目錄及附註不會匯入。掃描或拍照之 PDF 請改用 Excel 檔。</p>
+      {result && <div className={result.ok ? 'ok small' : 'error'}>{result.lines.map((x, i) => <div key={i}>{x}</div>)}</div>}
       {done.length > 0 && <p className="ok small">已匯入工作表：{done.join('、')}{file ? '；可繼續匯入下一張工作表，或按「完成」。' : '。'}</p>}
       {err && <p className="error">{err}</p>}
       {file && sheet && cfg && (

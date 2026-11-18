@@ -87,3 +87,26 @@ describe('PDF 財報匯入（文字型）', async () => {
     }
   });
 });
+
+describe('PDF 實務版式（以座標直接建構）', () => {
+  // 以每字 10pt 寬度建立文字項目
+  const row = (y: number, cells: [number, string, 'l' | 'r'][], page = 1) =>
+    cells.map(([x, str, al]) => ({ str, x: al === 'r' ? x - str.length * 5.5 : x, y, w: str.length * (/[一-鿿]/.test(str) ? 10 : 5.5), h: 10, page }));
+  it('標題與公司名稱同列、金額前有「$」', () => {
+    const items = [
+      ...row(40, [[80, '範例股份有限公司及子公司　合併資產負債表', 'l']]),
+      ...row(55, [[80, '民國114年12月31日', 'l']]),
+      ...row(80, [[40, '代碼', 'l'], [80, '會計項目', 'l'], [380, '114年12月31日', 'r']]),
+      ...['現金及約當現金|$ 35,000', '應收帳款淨額|44,000', '存貨|30,000', '不動產、廠房及設備|75,000', '短期借款|20,000', '應付帳款|25,000', '股本|60,000', '資產總計|$ 198,000'].flatMap((t, i) => {
+        const [l, a] = t.split('|');
+        return row(100 + i * 14, [[40, String(1100 + i), 'l'], [80, l, 'l'], [380, a, 'r']]);
+      }),
+      ...row(40, [[80, '四、合併資產負債表', 'l']], 2), ...row(60, [[80, '目錄', 'l']], 2),
+    ];
+    const sheets = itemsToSheets(items);
+    expect(sheets[0].name).toBe('合併資產負債表（第 1 頁）');
+    const rows = sheets[0].rows;
+    expect(rows.find((r) => r[1] === '現金及約當現金')!.includes('$ 35,000')).toBe(true);
+    expect(sheets.filter((x) => /（第/.test(x.name)).length).toBe(1);
+  });
+});
